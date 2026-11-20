@@ -1,5 +1,9 @@
 name: Publish site to GitHub Pages
-on: workflow_dispatch
+on:
+  push:
+    branches: [main]
+    paths: ["site/**"]
+  workflow_dispatch:
 
 permissions:
   contents: read
