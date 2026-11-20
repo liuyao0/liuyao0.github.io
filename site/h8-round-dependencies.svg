@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="600" viewBox="0 0 1080 600" role="img" aria-labelledby="title desc">
+  <title id="title">第7轮的核内时序和跨核依赖</title>
+  <desc id="desc">左侧AIV依次Gather tile 7、处理tile 6的Softmax、更新tile 5的输出。右侧AIC依次计算tile 7的QK和tile 6的PV。跨核实线传数据，虚线表示tile 1和tile 7复用同一KV缓冲槽。</desc>
+  <defs>
+    <marker id="seq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="m0 0 10 5-10 5z" fill="#42546a"/></marker>
+    <marker id="data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="m0 0 10 5-10 5z" fill="#087269"/></marker>
+    <marker id="reuse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="m0 0 10 5-10 5z" fill="#995415"/></marker>
+    <style>
+      text{font-family:"PingFang SC","Microsoft YaHei",sans-serif;fill:#19354a}
+      .lane{font-size:24px;font-weight:650}.stage{font-size:22px;font-weight:600}.caption{font-size:17px}
+      .prior{font-size:17px;fill:#4e6175}.payload{font-size:17px;fill:#08685e}
+      .s,.d,.r{fill:none;stroke-width:2.5;stroke-linejoin:round}
+      .s{stroke:#42546a;marker-end:url(#seq)}.d{stroke:#087269;marker-end:url(#data)}.r{stroke:#995415;stroke-dasharray:7 5;marker-end:url(#reuse)}
+    </style>
+  </defs>
+  <rect width="1080" height="600" fill="white"/>
+  <text x="185" y="33" text-anchor="middle" class="lane">AIV</text>
+  <text x="885" y="33" text-anchor="middle" class="lane">AIC</text>
+  <rect x="720" y="55" width="330" height="37" rx="7" fill="#f3f5f7" stroke="#e0e5ea"/>
+  <text x="885" y="80" text-anchor="middle" class="prior">第2轮，tile 1 的 PV 已读完 V</text>
+  <rect x="720" y="116" width="330" height="37" rx="7" fill="#f3f5f7" stroke="#e0e5ea"/>
+  <text x="885" y="141" text-anchor="middle" class="prior">第6轮，tile 6 的 QKᵀ</text>
+  <rect x="720" y="176" width="330" height="37" rx="7" fill="#f3f5f7" stroke="#e0e5ea"/>
+  <text x="885" y="201" text-anchor="middle" class="prior">第6轮，tile 5 的 PV</text>
+  <path d="M885 93 V112" class="s"/>
+  <path d="M885 154 V172" class="s"/>
+  <path d="M885 214 V262" class="s"/>
+  <path d="M885 333 V391" class="s"/>
+  <rect x="30" y="244" width="310" height="66" rx="7" fill="#edf4fc" stroke="#b2cbe3"/>
+  <text x="185" y="273" text-anchor="middle" class="stage">tile 7 的 Gather</text>
+  <text x="185" y="297" text-anchor="middle" class="caption">query 3 的 TopK KV</text>
+  <rect x="30" y="372" width="310" height="66" rx="7" fill="#edf4fc" stroke="#b2cbe3"/>
+  <text x="185" y="401" text-anchor="middle" class="stage">tile 6 的 Softmax</text>
+  <text x="185" y="425" text-anchor="middle" class="caption">query 3 的滑窗分数 → P</text>
+  <rect x="30" y="477" width="310" height="66" rx="7" fill="#edf4fc" stroke="#b2cbe3"/>
+  <text x="185" y="506" text-anchor="middle" class="stage">tile 5 的输出更新</text>
+  <text x="185" y="530" text-anchor="middle" class="caption">合并 TopK 贡献，写回 query 2</text>
+  <rect x="720" y="266" width="330" height="66" rx="7" fill="#e5f4f0" stroke="#a9cfbf"/>
+  <text x="885" y="295" text-anchor="middle" class="stage">tile 7 的 QKᵀ</text>
+  <text x="885" y="319" text-anchor="middle" class="caption">query 3 的 TopK 分数</text>
+  <rect x="720" y="395" width="330" height="66" rx="7" fill="#e5f4f0" stroke="#a9cfbf"/>
+  <text x="885" y="424" text-anchor="middle" class="stage">tile 6 的 PV</text>
+  <text x="885" y="448" text-anchor="middle" class="caption">query 3 的滑窗部分输出</text>
+  <path d="M185 311 V368" class="s"/>
+  <path d="M185 439 V473" class="s"/>
+  <path d="M720 75 H185 V240" class="r"/>
+<text x="520" y="66" text-anchor="middle" style="font-size:17px;fill:#874807">同一 GM 槽可再次写入</text>
+  <path d="M720 134 H400 V390 H344" class="d"/>
+  <text x="558" y="125" text-anchor="middle" class="payload">tile 6 的滑窗分数</text>
+  <path d="M720 194 H463 V503 H344" class="d"/>
+  <text x="590" y="185" text-anchor="middle" class="payload">tile 5 的 TopK 部分输出</text>
+  <path d="M341 290 H716" fill="none" stroke="white" stroke-width="10"/>
+  <path d="M341 290 H716" class="d"/>
+  <text x="591" y="280" text-anchor="middle" class="payload">tile 7 的 TopK KV</text>
+  <path d="M341 419 H716" fill="none" stroke="white" stroke-width="10"/>
+  <path d="M341 419 H716" class="d"/>
+  <text x="591" y="409" text-anchor="middle" class="payload">tile 6 的权重 P</text>
+<text x="933" y="250" text-anchor="middle" class="caption" style="paint-order:stroke;stroke:white;stroke-width:9">第7轮</text>
+  <path d="M30 577 h39" class="s"/>
+  <text x="124" y="583" text-anchor="middle" class="caption">时序依赖</text>
+  <path d="M226 577 h39" class="d"/>
+  <text x="320" y="583" text-anchor="middle" class="caption">数据依赖</text>
+  <path d="M425 577 h39" class="r"/>
+  <text x="519" y="583" text-anchor="middle" class="caption">资源依赖</text>
+  <rect x="731" y="565" width="23" height="20" rx="7" fill="#f3f5f7" stroke="#e0e5ea"/>
+  <text x="837" y="582" text-anchor="middle" class="caption">此前轮次的操作</text>
+</svg>

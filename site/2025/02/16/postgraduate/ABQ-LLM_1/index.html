@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/san.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/san.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+<link rel="stylesheet" href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&display=swap&subset=latin,latin-ext">
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"liuyao0.github.io","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":false,"style":"flat"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.json"};
+  </script>
+
+  <meta name="description" content="前言本系列将分析ByteDance项目ABQ-LLM的源码，并将重点放在llama模型端到端性能测试上，ABQ-LLM的模型端到端性能测试是基于NVIDIA的FasterTransformer项目搭建的。ABQ-LLM的github仓库：https:&#x2F;&#x2F;github.com&#x2F;bytedance&#x2F;ABQ-LLMABQ-LLM论文链接：https:&#x2F;&#x2F;arxiv.org&#x2F;abs&#x2F;2408.08554F">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ABQ-LLM源码分析（1) - llama_exapmle.cc">
+<meta property="og:url" content="https://liuyao0.github.io/2025/02/16/postgraduate/ABQ-LLM_1/index.html">
+<meta property="og:site_name" content="Liu Yao&#39;s attic">
+<meta property="og:description" content="前言本系列将分析ByteDance项目ABQ-LLM的源码，并将重点放在llama模型端到端性能测试上，ABQ-LLM的模型端到端性能测试是基于NVIDIA的FasterTransformer项目搭建的。ABQ-LLM的github仓库：https:&#x2F;&#x2F;github.com&#x2F;bytedance&#x2F;ABQ-LLMABQ-LLM论文链接：https:&#x2F;&#x2F;arxiv.org&#x2F;abs&#x2F;2408.08554F">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2025-02-16T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-11-20T08:46:12.317Z">
+<meta property="article:author" content="Liu Yao">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://liuyao0.github.io/2025/02/16/postgraduate/ABQ-LLM_1/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>ABQ-LLM源码分析（1) - llama_exapmle.cc | Liu Yao's attic</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+<a target="_blank" rel="noopener" href="https://github.com/liuyao0" class="github-corner" aria-label="View source on GitHub"><svg width="80" height="80" viewBox="0 0 250 250" style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"/><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"/><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"/></svg></a><style>.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}@media (max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octocat-wave 560ms ease-in-out}}</style>
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Liu Yao's attic</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://liuyao0.github.io/2025/02/16/postgraduate/ABQ-LLM_1/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/rain_1x1.jpg">
+      <meta itemprop="name" content="Liu Yao">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Liu Yao's attic">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          ABQ-LLM源码分析（1) - llama_exapmle.cc
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2025-02-17 00:00:00" itemprop="dateCreated datePublished" datetime="2025-02-17T00:00:00+08:00">2025-02-17</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-11-20 16:46:12" itemprop="dateModified" datetime="2026-11-20T16:46:12+08:00">2026-11-20</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/ABQ-LLM/" itemprop="url" rel="index"><span itemprop="name">ABQ-LLM</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>本系列将分析ByteDance项目<code>ABQ-LLM</code>的源码，并将重点放在llama模型端到端性能测试上，<code>ABQ-LLM</code>的模型端到端性能测试是基于NVIDIA的<code>FasterTransformer</code>项目搭建的。<br><code>ABQ-LLM</code>的github仓库：<a target="_blank" rel="noopener" href="https://github.com/bytedance/ABQ-LLM">https://github.com/bytedance/ABQ-LLM</a><br><code>ABQ-LLM</code>论文链接：<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2408.08554">https://arxiv.org/abs/2408.08554</a><br><code>FasterTransformer</code>的github仓库：<a target="_blank" rel="noopener" href="https://github.com/NVIDIA/FasterTransformer">https://github.com/NVIDIA/FasterTransformer</a></p>
+<p>在构建<code>FasterTransformer</code>时，由于需克隆第三方的<code>cutlass</code>和<code>googletest</code>github仓库用于性能对比，而github的访问不太稳定，导致构建缓慢或失败，可选的解决方案包括挂代理和使用github镜像，这里推荐使用github镜像，自己用下来效果比较好的是<code>githubfast.com</code>。在开始构建前在<code>CMakeLists.txt</code>中把相关git仓库的链接修改即可。</p>
+<blockquote>
+<p>GIT_REPOSITORY <a target="_blank" rel="noopener" href="https://github.com/google/googletest.git">https://github.com/google/googletest.git</a><br>改为<br>GIT_REPOSITORY <a target="_blank" rel="noopener" href="https://githubfast.com/google/googletest.git">https://githubfast.com/google/googletest.git</a></p>
+<p>GIT_REPOSITORY <a target="_blank" rel="noopener" href="https://github.com/NVIDIA/cutlass.git">https://github.com/NVIDIA/cutlass.git</a><br>改为<br>GIT_REPOSITORY <a target="_blank" rel="noopener" href="https://githubfast.com/NVIDIA/cutlass.git">https://githubfast.com/NVIDIA/cutlass.git</a></p>
+</blockquote>
+<p><code>ABQ-LLM</code>为<code>FasterTransformer</code>添加了量化版<code>llama</code>和<code>llama2</code>模型的支持，模型的端到端性能测试文件在<code>fastertransformer/example/cpp/llama</code>和<code>fastertransformer/example/cpp/llamaV2</code>中，具体的<code>main</code>函数分别在<code>llama_example.cc</code>和<code>llamaV2_example.cc</code>中。</p>
+<h2 id="llama-example-cc-main"><a href="#llama-example-cc-main" class="headerlink" title="llama_example.cc - main()"></a>llama_example.cc - main()</h2><p>直接看main函数。</p>
+<blockquote>
+<p><code>mpi::initialize(&amp;argc, &amp;argv);</code></p>
+</blockquote>
+<p><code>mpi</code>是用于多GPU运算的库，如果不开启多GPU的支持，可以在<code>FasterTransformer</code>项目的<code>build.sh</code>中调整<code>-DBUILD_MULTI_GPU=OFF</code>，此时<code>mpi::initialize</code>是一个空函数，不会执行任何操作。</p>
+<p>接下来的代码读取<code>.ini</code>文件中的配置项，并根据其中<code>data_type</code>的值决定用<code>float</code>还是用<code>half</code>实例化并执行<code>llama_example</code>函数。这里感觉有点奇怪，明明执行的是低精度INT量化的模型，为何还会使用浮点类型呢？留待后续解决。</p>
+<h2 id="llama-example-cc-llama-example"><a href="#llama-example-cc-llama-example" class="headerlink" title="llama_example.cc - llama_example()"></a>llama_example.cc - llama_example()</h2><p>这是一个模板函数，带有一个可变类型<code>T</code>，回忆一下，这个类型是由配置文件里的<code>data_type</code>决定的。</p>
+<h3 id="超参数"><a href="#超参数" class="headerlink" title="超参数"></a>超参数</h3><p>进到函数里首先是读了一大堆参数，分别看下这些参数是干嘛的。<br><code>tensor_para_size</code>：张量并行度<br><code>pipeline_para_size</code>：流水线并行度<br><code>sparse</code>：是否采用稀疏化<br><code>release_dense</code>比较抽象，追踪进去发现代码段</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (release_old &amp;&amp; dense_weights[i] != <span class="literal">nullptr</span>)&#123;</span><br><span class="line">    T* release_point = <span class="built_in">const_cast</span>&lt;T*&gt;(dense_weights[i]);</span><br><span class="line">    <span class="built_in">deviceFree</span>(release_point);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这就能理解了，当<code>release_dense</code>为<code>true</code>时，压缩后的稀疏权重会替代原始的密集权重，并且原始的密集矩阵会被释放，从而减少内存占用；<code>release_dense</code>为<code>false</code>时，原始的密集权重不会被释放，仍然保留在内存中。<br>在实际实现中，<code>llama_config.ini</code>中未指定这两项，即这两项会取默认值，不开启稀疏。<br><code>int8_mode</code>指定了量化的形式，取值及其代表的意义可查<code>ABQ-LLM</code>的<code>README.md</code>。</p>
+<h3 id="模型结构参数"><a href="#模型结构参数" class="headerlink" title="模型结构参数"></a>模型结构参数</h3><p><code>head_num</code>：表示注意力头的数量。在多头自注意力机制（Multi-head Attention）中，head_num 控制了注意力头的数量，每个注意力头会学习不同的表示。<br><code>size_per_head</code>：每个注意力头的维度。它决定了每个注意力头的输出向量的大小。和<code>head_num</code>一起决定了总的隐藏层大小。<br><code>vocab_size</code>：模型的词汇表大小。<br><code>decoder_layers</code>：解码器层的数量。<br><code>rotary_embedding_dim</code>：旋转嵌入的维度大小。<br><code>layernorm_eps</code>：<code>Layer Normalization</code>的<code>epsilon</code>值。<code>epsilon</code>是一个非常小的常数，用来避免在进行除法时出现除零错误。<br><code>start_id</code>：模型输入的开始标记ID。<br><code>end_id</code>：模型输入的结束标记ID。<br><code>hidden_units</code>：模型的隐藏单元数。它由<code>head_num * size_per_head</code>计算得来，表示每个层的维度大小。<br><code>inter_size</code>：前馈神经网络的中间层大小。</p>
+<h3 id="生成策略参数"><a href="#生成策略参数" class="headerlink" title="生成策略参数"></a>生成策略参数</h3><p>这些全是控制模型生成结果的特性的一些参数，之前没有接触过，用GPT快速学习一下，基本都能有个大概的理解。<br><code>beam_width</code>：束搜索的宽度。在生成任务中，束搜索（Beam Search）是一种用于生成多个候选序列并选择最佳的策略，beam_width 决定了每次生成时考虑的候选序列数量。较大的 beam_width 可以提高生成质量，但也会增加计算开销。<br><code>top_k</code>：Top-K 采样的 K 值。在生成文本时，Top-K 采样会从概率分布中选择前 K 个最可能的单词进行采样，其他的单词则被丢弃。较大的 K 会导致更多的多样性，但也可能降低生成质量。<br><code>top_p</code>：Top-P 采样的概率阈值。Top-P 采样（也叫 nucleus 采样）会选择累计概率大于 p 的单词集合进行采样，控制生成结果的多样性。top_p 控制了保留多少最可能的单词，较小的 top_p 会限制输出的选择范围。<br><code>temperature</code>：温度系数。在采样过程中，温度用于控制概率分布的平滑度。较低的温度会使得输出更加确定性（模型更倾向于选择最高概率的词），较高的温度则增加了生成的多样性（模型选择更多低概率的词）。<br><code>repetition_penalty</code>：重复惩罚系数。用于惩罚模型生成重复的单词或短语。repetition_penalty 设置了惩罚的力度，较高的值能减少重复输出的可能性。<br><code>presence_penalty</code>：出现惩罚系数。用于惩罚模型生成已经在上下文中出现过的单词。这有助于避免重复使用同一个单词或短语。<br><code>len_penalty</code>：长度惩罚系数。用于控制生成文本的长度，防止生成过短或过长的输出。较高的<code>len_penalty</code>值可以使模型生成较长的序列。<br><code>beam_search_diversity_rate</code>：束搜索多样性率。这个参数用于控制束搜索中每个候选序列之间的多样性。如果设置较高的值，会鼓励生成更加多样化的输出。<br><code>min_length</code>：生成文本的最小长度。这个参数保证了生成的文本至少包含<code>min_length</code>个标记。常用于限制模型生成太短的文本。<br><code>request_batch_size</code>：每次请求的批处理大小。这里的值为 1，即每次只处理一个请求，通常在生成任务中用于设置模型每次处理的输入批次大小。<br><code>total_output_len</code>：请求的总输出长度。表示希望模型生成的最终输出序列的总长度。<br><code>request_output_len</code>：请求的输出长度。指定模型在一次请求中生成的文本长度，可能用于控制生成的文本长度或者用于分页生成。</p>
+<h3 id="参数合法性的检查"><a href="#参数合法性的检查" class="headerlink" title="参数合法性的检查"></a>参数合法性的检查</h3><p><code>head_num % tensor_para_size == 0</code>：注意力头必须能被均匀地分到多个张量并行的设备上。<br><code>decoder_layers % pipeline_para_size == 0</code>：不同的解码器必须能被均匀地分到多个流水线并行的设备上。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> rank       = mpi::<span class="built_in">getCommWorldRank</span>();</span><br><span class="line"><span class="type">int</span> world_size = mpi::<span class="built_in">getCommWorldSize</span>();</span><br><span class="line"><span class="keyword">if</span> (rank == <span class="number">0</span>) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;Total ranks: %d.\n&quot;</span>, world_size);</span><br><span class="line">&#125;</span><br><span class="line"><span class="type">int</span> device, device_count;</span><br><span class="line"><span class="built_in">check_cuda_error</span>(<span class="built_in">cudaGetDeviceCount</span>(&amp;device_count));</span><br><span class="line"><span class="built_in">check_cuda_error</span>(<span class="built_in">cudaSetDevice</span>(rank % device_count));</span><br><span class="line"><span class="built_in">check_cuda_error</span>(<span class="built_in">cudaGetDevice</span>(&amp;device));</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">cudaDeviceProp</span> prop;</span><br><span class="line"><span class="built_in">check_cuda_error</span>(<span class="built_in">cudaGetDeviceProperties</span>(&amp;prop, device));</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;Device %s\n&quot;</span>, prop.name);</span><br><span class="line"></span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;P%d is running with GPU #%d.\n&quot;</span>, rank, device);</span><br></pre></td></tr></table></figure>
+<p>同样是多GPU相关的操作。值得注意的是，项目中为了保持外层代码干净，并没有将是否开启多GPU的编译指令写在外层代码中，而是定义了一个叫<code>mpi</code>的命名空间，无论是否开启了多GPU的支持，<code>mpi</code>中的函数都会执行，区别在于在未开启多GPU的情况下<code>mpi</code>中的函数几乎什么都不做，只返回一些默认值（如<code>rank = 0, world_size = 1</code>），而开启的情况下则执行多GPU的相关逻辑。</p>
+<p><code>cudaGetDeviceCount(&amp;device_count)</code>：获取系统中可用的 GPU 设备数量。<br><code>cudaSetDevice(rank % device_count)</code>：设置当前设备为根据<code>rank</code>计算得到的GPU设备。设备内存的分配和核函数的启动都会在当前设置的设备上；流与事件的创建也是发生在当前所设置的设备上。如果没有显式的调用设置设备的函数，则默认的当前设备是0。<br><code>cudaGetDevice(&amp;device)</code>：获取当前设置的设备ID。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (tensor_para_size * pipeline_para_size != world_size) &#123;</span><br><span class="line">    <span class="keyword">if</span> (world_size % pipeline_para_size) &#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;[ERROR] tensor_para_size * pipeline_para_size should equal to world_size \n&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">-1</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    tensor_para_size = world_size / pipeline_para_size;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[INFO] Setting tensor_para_size to %d \n&quot;</span>, tensor_para_size);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>接下来检查<code>tensor_para_size * pipeline_para_size == world_size</code>是否满足。如果不满足，那么检查<code>pipeline_para_size</code>能否被<code>world_size</code>整除，如果可以则据此计算<code>pipeline_para_size</code>，否则报错退出。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">int</span> layers_per_group = decoder_layers / pipeline_para_size;</span><br><span class="line"><span class="keyword">if</span> (layers_per_group * pipeline_para_size != (<span class="type">int</span>)decoder_layers) &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[ERROR] layers_per_group (%d) * pipeline_para_size (%d) should equal to decoder_layers (%ld) \n&quot;</span>,</span><br><span class="line">           layers_per_group,</span><br><span class="line">           pipeline_para_size,</span><br><span class="line">           decoder_layers);</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">-1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里是检查解码器能否均分到几个流水线上，但是其实之前就检查过了。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// assume gpu_num = k * n,</span></span><br><span class="line"><span class="comment">// tensor parallelism group size is n</span></span><br><span class="line"><span class="comment">// pipeline parallelism group size is k</span></span><br><span class="line">NcclParam tensor_para;</span><br><span class="line">NcclParam pipeline_para;</span><br><span class="line"><span class="built_in">ftNcclInitialize</span>(tensor_para, pipeline_para, tensor_para_size, pipeline_para_size);</span><br></pre></td></tr></table></figure>
+<p><code>ftNcclInitialize()</code>中对nccl进行了一些初始化，由于不打算进行多GPU的实验，此处暂不做研究。</p>
+<h3 id="读取停止词和坏词"><a href="#读取停止词和坏词" class="headerlink" title="读取停止词和坏词"></a>读取停止词和坏词</h3><p>接下来代码读取坏词和停止词的列表，用到了函数<code>read_word_list()</code>：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">read_word_list</span><span class="params">(<span class="type">const</span> std::string&amp; filename, std::vector&lt;<span class="type">int</span>&gt;&amp; file_data)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">std::ifstream <span class="title">word_list_file</span><span class="params">(filename, std::ios::in)</span></span>;</span><br><span class="line"></span><br><span class="line">    std::string line_buf;</span><br><span class="line">    <span class="type">int</span>         line_count   = <span class="number">0</span>;</span><br><span class="line">    <span class="type">size_t</span>      id_counts[<span class="number">2</span>] = &#123;<span class="number">0</span>, <span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">while</span> (std::<span class="built_in">getline</span>(word_list_file, line_buf)) &#123;</span><br><span class="line"></span><br><span class="line">        <span class="function">std::stringstream <span class="title">line_stream</span><span class="params">(line_buf)</span></span>;</span><br><span class="line">        std::string       vals;</span><br><span class="line">        <span class="keyword">while</span> (std::<span class="built_in">getline</span>(line_stream, vals, <span class="string">&#x27;,&#x27;</span>)) &#123;</span><br><span class="line">            file_data.<span class="built_in">push_back</span>(std::<span class="built_in">stoi</span>(vals));</span><br><span class="line">            id_counts[line_count]++;</span><br><span class="line">        &#125;</span><br><span class="line">        line_count++;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (line_count &gt; <span class="number">1</span>) &#123;</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">assert</span>(id_counts[<span class="number">0</span>] == id_counts[<span class="number">1</span>]);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>代码通过<code>std::getline</code>逐行读取文件，每一行存储在<code>line_buf</code>中，然后将该行的内容通过<code>std::stringstream</code>按逗号分隔成多个值。对于每个分隔出的值，使用<code>std::stoi</code>将其转换为整数，并存储到<code>file_data</code>向量中，然后通过<code>id_counts[line_count]++</code>记录当前行的列数，<code>line_count</code>增加，直到读取第二行数据后跳出循环。也就是说，代码只管csv文件的前两行，并且要求两行的列数是相等的。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">std::vector&lt;<span class="type">int</span>&gt; bad_words;</span><br><span class="line"><span class="built_in">read_word_list</span>(<span class="string">&quot;../examples/cpp/llamaV2/bad_words.csv&quot;</span>, bad_words);</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* d_bad_words = <span class="literal">nullptr</span>;</span><br><span class="line"><span class="built_in">deviceMalloc</span>(&amp;d_bad_words, bad_words.<span class="built_in">size</span>(), <span class="literal">false</span>);</span><br><span class="line"><span class="built_in">cudaH2Dcpy</span>(d_bad_words, bad_words.<span class="built_in">data</span>(), bad_words.<span class="built_in">size</span>());</span><br><span class="line"></span><br><span class="line"><span class="comment">// Handle stop_words dictionary</span></span><br><span class="line">std::vector&lt;<span class="type">int</span>&gt; stop_words;</span><br><span class="line"><span class="built_in">read_word_list</span>(<span class="string">&quot;../examples/cpp/llamaV2/stop_words.csv&quot;</span>, stop_words);</span><br><span class="line"></span><br><span class="line"><span class="type">const</span> <span class="type">size_t</span> stop_words_len = stop_words.<span class="built_in">size</span>() / <span class="number">2</span>;</span><br><span class="line"><span class="comment">// Tile with same dict for each element</span></span><br><span class="line">std::vector&lt;<span class="type">int</span>&gt; tiled_stop_words;</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; request_batch_size; i++) &#123;</span><br><span class="line">    tiled_stop_words.<span class="built_in">insert</span>(tiled_stop_words.<span class="built_in">end</span>(), stop_words.<span class="built_in">begin</span>(), stop_words.<span class="built_in">end</span>());</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* d_stop_words = <span class="literal">nullptr</span>;</span><br><span class="line"><span class="built_in">deviceMalloc</span>(&amp;d_stop_words, tiled_stop_words.<span class="built_in">size</span>(), <span class="literal">false</span>);</span><br><span class="line"><span class="built_in">cudaH2Dcpy</span>(d_stop_words, tiled_stop_words.<span class="built_in">data</span>(), tiled_stop_words.<span class="built_in">size</span>());</span><br></pre></td></tr></table></figure>
+<p>这样，停止词的数量就为<code>stop_words_len = stop_words.size() / 2</code>。停止词会被拷贝<code>request_batch_size</code>次，至于为什么，等待后续研究吧。</p>
+<h3 id="读取开始词"><a href="#读取开始词" class="headerlink" title="读取开始词"></a>读取开始词</h3><p>根据大模型的工作机制，开始词就是我们给到模型的输入。下面是读取开始词的代码：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Read ids of request from file.</span></span><br><span class="line"><span class="type">size_t</span>           max_input_len = <span class="number">-1</span>;</span><br><span class="line">std::vector&lt;<span class="type">int</span>&gt; v_start_lengths;</span><br><span class="line">std::vector&lt;<span class="type">int</span>&gt; v_start_ids;</span><br><span class="line"><span class="built_in">read_start_ids</span>(request_batch_size,</span><br><span class="line">                &amp;v_start_lengths,</span><br><span class="line">                &amp;v_start_ids,</span><br><span class="line">                max_input_len,</span><br><span class="line">                end_id,</span><br><span class="line">                <span class="number">1</span>,</span><br><span class="line">                <span class="string">&quot;../examples/cpp/llamaV2/start_ids.csv&quot;</span>);</span><br><span class="line"></span><br><span class="line"><span class="type">int</span>* d_input_ids;</span><br><span class="line"><span class="type">int</span>* d_input_lengths;</span><br><span class="line"><span class="keyword">if</span> (max_input_len == <span class="number">0</span>) &#123;</span><br><span class="line">    <span class="comment">// unconditional case, no input ids, so do nothing.</span></span><br><span class="line">    d_input_ids     = <span class="literal">nullptr</span>;</span><br><span class="line">    d_input_lengths = <span class="literal">nullptr</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// conditional case.</span></span><br><span class="line">    <span class="built_in">deviceMalloc</span>(&amp;d_input_ids, request_batch_size * max_input_len, <span class="literal">false</span>);</span><br><span class="line">    <span class="built_in">deviceMalloc</span>(&amp;d_input_lengths, request_batch_size, <span class="literal">false</span>);</span><br><span class="line">    <span class="built_in">cudaH2Dcpy</span>(d_input_ids, v_start_ids.<span class="built_in">data</span>(), request_batch_size * max_input_len);</span><br><span class="line">    <span class="built_in">cudaH2Dcpy</span>(d_input_lengths, v_start_lengths.<span class="built_in">data</span>(), request_batch_size);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function">std::vector&lt;<span class="type">int</span>&gt; <span class="title">start_ids</span><span class="params">(request_batch_size, start_id)</span></span>;</span><br><span class="line"><span class="function">std::vector&lt;<span class="type">int</span>&gt; <span class="title">end_ids</span><span class="params">(request_batch_size, end_id)</span></span>;</span><br></pre></td></tr></table></figure>
+<p>其中主要的函数是<code>read_start_ids()</code>，又是一个很长的函数。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">read_start_ids</span><span class="params">(<span class="type">size_t</span>            batch_size,</span></span></span><br><span class="line"><span class="params"><span class="function">                   std::vector&lt;<span class="type">int</span>&gt;* v_start_lengths,</span></span></span><br><span class="line"><span class="params"><span class="function">                   std::vector&lt;<span class="type">int</span>&gt;* v_start_ids,</span></span></span><br><span class="line"><span class="params"><span class="function">                   <span class="type">size_t</span>&amp;           max_input_len,</span></span></span><br><span class="line"><span class="params"><span class="function">                   <span class="type">const</span> <span class="type">int</span>         end_id,</span></span></span><br><span class="line"><span class="params"><span class="function">                   <span class="type">const</span> <span class="type">int</span>         beam_width,</span></span></span><br><span class="line"><span class="params"><span class="function">                   std::string       file_name)</span></span>;</span><br></pre></td></tr></table></figure>
+<p>下面逐步分析。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">std::vector&lt;std::vector&lt;<span class="type">int</span>&gt;&gt; tmp_start_ids;</span><br><span class="line">std::vector&lt;<span class="type">int</span>&gt;              tmp_start_lengths;</span><br></pre></td></tr></table></figure>
+<p><code>tmp_start_ids</code>用于存储读到的所有<code>start_id</code>，因此是一个二维向量；<code>tmp_start_lengths</code>用于存储每行的长度。</p>
+<p>开始读取后，代码按行读取文件，把单词存入<code>tmp_start_ids</code>的同时计数，把每行的长度存入<code>tmp_start_lengths</code>。</p>
+<p>如果<code>batch_size == 0</code>，那么<code>batch_size</code>就设为<code>start_id</code>的行数；</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">max_input_len = tmp_start_lengths.<span class="built_in">data</span>()[<span class="number">0</span>];</span><br><span class="line"><span class="keyword">for</span> (uint i = <span class="number">1</span>; i &lt; (uint)tmp_start_lengths.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    max_input_len = max_input_len &gt; tmp_start_lengths.<span class="built_in">data</span>()[i] ? max_input_len : tmp_start_lengths.<span class="built_in">data</span>()[i];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>遍历所有行，将最长的一行的长度存在变量<code>max_input_len</code>中。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">while</span> ((<span class="type">int</span>)tmp_start_lengths.<span class="built_in">size</span>() &lt; batch_size) &#123;</span><br><span class="line">    std::vector&lt;<span class="type">int</span>&gt; padding_ids;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; max_input_len; i++) &#123;</span><br><span class="line">        padding_ids.<span class="built_in">push_back</span>(end_id);</span><br><span class="line">    &#125;</span><br><span class="line">    tmp_start_ids.<span class="built_in">push_back</span>(padding_ids);</span><br><span class="line">    tmp_start_lengths.<span class="built_in">push_back</span>(max_input_len);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果当前的输入行数比<code>batch_size</code>小，那么进行填充。填充的方法为，填充到行数等于<code>batch_size</code>，每一行都是<code>max_input_len</code>个结束词。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Add padding</span></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; (<span class="type">int</span>)tmp_start_ids.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> j = (<span class="type">int</span>)tmp_start_ids[i].<span class="built_in">size</span>(); j &lt; max_input_len; j++) &#123;</span><br><span class="line">        tmp_start_ids[i].<span class="built_in">push_back</span>(end_id);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>接下来还要对每行使用结束词填充，保证每行的长度一致。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; (<span class="type">int</span>)tmp_start_ids.<span class="built_in">size</span>(); i++) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> b = <span class="number">0</span>; b &lt; beam_width; b++) &#123;</span><br><span class="line">        <span class="keyword">for</span> (<span class="type">int</span> j = <span class="number">0</span>; j &lt; (<span class="type">int</span>)tmp_start_ids[i].<span class="built_in">size</span>(); j++) &#123;</span><br><span class="line">            v_start_ids-&gt;<span class="built_in">push_back</span>(tmp_start_ids[i][j]);</span><br><span class="line">        &#125;</span><br><span class="line">        v_start_lengths-&gt;<span class="built_in">push_back</span>(tmp_start_lengths[i]);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>最后，如果开启了束搜索策略，还要对每行数据进行<code>beam_width</code>扩展，复制每行的ID和长度<code>beam_width</code>次，并将其存入<code>v_start_ids</code>和<code>v_start_lengths</code>中。<br>这样，最终喂给模型的输入就生成了，接下来就是用<code>cudaH2Dcpy()</code>把输入拷贝到设备内存中。<br>这里<code>start_ids</code>和<code>end_ids</code>是干嘛的，暂未搞懂[todo]。</p>
+<h3 id="prompt-learning"><a href="#prompt-learning" class="headerlink" title="prompt_learning"></a>prompt_learning</h3><p>代码指定默认<code>prompt_learning_type</code>为<code>0</code>，即不开启prompt learning。</p>
+<h3 id="多task"><a href="#多task" class="headerlink" title="多task"></a>多task</h3><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">int</span> num_tasks = reader.<span class="built_in">GetInteger</span>(model_name, <span class="string">&quot;num_tasks&quot;</span>, <span class="number">0</span>);</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> task_name_id = <span class="number">0</span>; task_name_id &lt; num_tasks; task_name_id++) &#123;</span><br><span class="line">    std::string config_task_name = model_name + <span class="string">&quot;_task_&quot;</span> + std::<span class="built_in">to_string</span>(task_name_id);</span><br><span class="line">    std::string task_name        = reader.<span class="built_in">Get</span>(config_task_name, <span class="string">&quot;task_name&quot;</span>);</span><br><span class="line">    <span class="type">const</span> <span class="type">int</span>   prompt_length    = reader.<span class="built_in">GetInteger</span>(config_task_name, <span class="string">&quot;prompt_length&quot;</span>, <span class="number">0</span>);</span><br><span class="line">    prefix_prompt_table_pair.<span class="built_in">insert</span>(&#123;task_name, &#123;task_name_id, prompt_length&#125;&#125;);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>代码从配置文件中读取task的数目，并构造每个task的名称，读取每个task具体的<code>prompt_length</code>，并<code>&#123;task_name, (task_name_id, prompt_length)&#125;</code>的KV对存放到<code>prefix_prompt_table_pair</code>中。<br>然后代码定义了<code>std::vector&lt;int&gt; prefix_prompt_task_ids(request_batch_size, 0);</code>，用于存储每个<code>request</code>对应的<code>task_id</code>，各个<code>request</code>会被平均地分给几个<code>task</code>。<br>最后计算总输出长度，等于输入长度和请求输出长度的和。</p>
+<h3 id="stream与handle的创建"><a href="#stream与handle的创建" class="headerlink" title="stream与handle的创建"></a>stream与handle的创建</h3><p>接下来创建<code>cudaStream_t stream</code> <code>cublasHandle_t cublas_handle</code>和<code>cublasLtHandle_t cublaslt_handle</code>，并利用一系列初始化函数进行初始化，并把<code>cublas_handle</code>绑定在新创建的cuda流<code>stream</code>上。</p>
+<p>cublas在运行时需要加载GEMM的配置，注意<code>cublasAlgoMap</code>的构造函数只进行对应变量的赋值，不会进行实际的文件读取等操作。</p>
+<h3 id="Allocator内存管理器"><a href="#Allocator内存管理器" class="headerlink" title="Allocator内存管理器"></a>Allocator内存管理器</h3><p>接下来定义了一个fastertransformer里的自有类<code>Allocator</code>，并用<code>AllocatorType::CUDA</code>进行实例化。内联函数<code>getDevice()</code>通过调用cuda的<code>cudaGetDevice</code>获取当前进程的设备id。</p>
+<h4 id="成员变量"><a href="#成员变量" class="headerlink" title="成员变量"></a>成员变量</h4><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Allocator</span>&lt;AllocatorType::CUDA&gt;: <span class="keyword">public</span> IAllocator &#123;</span><br><span class="line">    <span class="type">const</span> <span class="type">int</span>                          device_id_;</span><br><span class="line">    cudaStream_t                       stream_ = <span class="number">0</span>;  <span class="comment">// initialize as default stream</span></span><br><span class="line">    std::unordered_map&lt;<span class="type">void</span>*, <span class="type">size_t</span>&gt;* pointer_mapping_;</span><br><span class="line">    ...</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>上面是<code>Allocator</code>类的成员变量。</p>
+<h4 id="构造函数"><a href="#构造函数" class="headerlink" title="构造函数"></a>构造函数</h4><p><code>Allocator</code>类的构造函数接收一个参数<code>device_id</code>，并用之初始化成员变量<code>device_id_</code>。<br>然后构造一个无序map：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pointer_mapping_ = <span class="keyword">new</span> std::<span class="built_in">unordered_map</span>&lt;<span class="type">void</span>*, <span class="type">size_t</span>&gt;();`</span><br></pre></td></tr></table></figure>
+<p>并获取设备数量：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> device_count = <span class="number">1</span>;</span><br><span class="line"><span class="built_in">check_cuda_error</span>(<span class="built_in">cudaGetDeviceCount</span>(&amp;device_count));</span><br></pre></td></tr></table></figure>
+<p>然后创建内存池。cuda内存池允许在设备上分配和释放内存时复用内存块，从而减少分配和释放内存的开销。cuda设备可以有多个内存池，但每个设备都有一个“默认内存池”，当你没有指定具体的内存池时，默认会使用这个内存池进行内存分配。<code>cudaDeviceGetDefaultMemPool</code>函数能够获取默认的内存池。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">cudaMemPool_t mempool;</span><br><span class="line"><span class="built_in">check_cuda_error</span>(<span class="built_in">cudaDeviceGetDefaultMemPool</span>(&amp;mempool, device_id));</span><br></pre></td></tr></table></figure>
+<p>接下来的部分又比较抽象了，因为原本的代码是支持多GPU的，虽然<code>ABQ-LLM</code>不包含多GPU的支持，但是多GPU的代码仍然遗留了下来。下面的部分主要是确保不同设备能够相互访问内存池中的内存。并且还设置了内存池的释放阈值，避免内存池在释放时出现不必要的内存回收。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">cudaMemAccessDesc desc = &#123;&#125;; <span class="comment">// 创建内存访问描述符对象，初始化为空</span></span><br><span class="line"><span class="type">int</span> peer_access_available = <span class="number">0</span>; <span class="comment">// 标志变量，表示设备之间的对等访问权限</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; device_count; i++) &#123;</span><br><span class="line">    <span class="keyword">if</span> (i == device_id) &#123;</span><br><span class="line">        <span class="keyword">continue</span>; <span class="comment">// 如果当前是本地设备，则跳过</span></span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 检查当前设备（i）是否可以访问 device_id 所代表的设备的内存</span></span><br><span class="line">    <span class="built_in">check_cuda_error</span>(<span class="built_in">cudaDeviceCanAccessPeer</span>(&amp;peer_access_available, device_id, i));</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">if</span> (!peer_access_available) &#123;</span><br><span class="line">        <span class="comment">// 如果不能访问，则输出警告信息并跳过</span></span><br><span class="line">        <span class="built_in">FT_LOG_WARNING</span>(<span class="string">&quot;Device &quot;</span> + std::<span class="built_in">to_string</span>(device_id) + <span class="string">&quot; peer access Device &quot;</span> + std::<span class="built_in">to_string</span>(i)</span><br><span class="line">                       + <span class="string">&quot; is not available.&quot;</span>);</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 设置内存访问描述符，指定允许的设备访问权限</span></span><br><span class="line">    desc.location.type = cudaMemLocationTypeDevice;  <span class="comment">// 设置为设备类型</span></span><br><span class="line">    desc.location.id = i;  <span class="comment">// 设备的 ID</span></span><br><span class="line">    desc.flags = cudaMemAccessFlagsProtReadWrite; <span class="comment">// 设置访问权限为读写</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 将内存访问权限设置为描述符指定的内容</span></span><br><span class="line">    <span class="built_in">check_cuda_error</span>(<span class="built_in">cudaMemPoolSetAccess</span>(mempool, &amp;desc, <span class="number">1</span>));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 设置内存池的释放阈值，避免内存池在不需要时被过早释放</span></span><br><span class="line"><span class="type">uint64_t</span> setVal = UINT64_MAX;</span><br><span class="line"><span class="built_in">check_cuda_error</span>(<span class="built_in">cudaMemPoolSetAttribute</span>(mempool, cudaMemPoolAttrReleaseThreshold, &amp;setVal));</span><br></pre></td></tr></table></figure>
+<h4 id="析构函数"><a href="#析构函数" class="headerlink" title="析构函数"></a>析构函数</h4><p>析构函数比较简单，就是把<code>pointer_mapping_</code>里面的东西和它本身free掉。</p>
+<p>那么这玩意儿分配和释放内存的逻辑是怎样的呢？</p>
+<h4 id="malloc"><a href="#malloc" class="headerlink" title="malloc()"></a>malloc()</h4><p>首先如果请求的内存大小为零直接返回空指针。如果不是，则初始化一个指针<code>ptr</code>，并定义变量<code>o_device</code>用于存储当前设备的ID。<br><code>getSetDevice(device_id_, &amp;o_device)</code>的行为则是把当前设备的ID保存到<code>o_device</code>中，并且切换到ID为<code>device_id</code>的设备。这意味着，调用用哪个设备的ID初始化的<code>Allocate</code>就会用切换到哪个设备分配内存，然后再切换回原来的设备。</p>
+<p>注意这里并不是<code>size</code>多大就分配多少个字节的内存，而是对<code>size</code>向上取到一个32的倍数，这样能够实现内存对齐提升访存效率。</p>
+<p>在<code>is_host == true</code>的情况下会用<code>cudaHostAlloc()</code>在主机上分配内存。用这个函数可以得到“主机锁页内存”。所谓“主机锁页内存”，就是被操作系统标记为不会交换到虚拟内存的固定区域，且GPU可以通过DMA（直接内存访问）直接从锁页内存中读取或写入数据，避免使用<code>cudaMemcpy</code>显式地拷贝数据。</p>
+<p>在<code>is_host ==  false</code>的情况下会在设备上分配内存。如果没有开启内存池技术，那么使用<code>cudaMalloc</code>进行同步的内存分配，否则在自己的流中进行异步分配（要记得<code>Allocator</code>类有一个<code>_stream</code>成员变量，默认初始化为CUDA的默认流）。</p>
+<p>另外还提供了<code>is_zero</code>的设置，如果为真则会把新分配的内存置零。</p>
+<p>最后把分配取得的内存的地址与大小记录在类的成员变量哈希表中。</p>
+<h4 id="free"><a href="#free" class="headerlink" title="free()"></a>free()</h4><p>与<code>malloc()</code>相同，<code>free()</code>也会切换到分配内存时的设备进行释放，释放完以后再恢复原设备上下文。<br>在释放时同样是根据是否启用CUDA内存池决定是同步释放还是异步释放，根据是否是主机内存决定调用哪个函数。<br>在释放时还会检查传入的地址是否在哈希表中有记录，如果没有的话会产生警告日志。</p>
+<h3 id="cublas准备"><a href="#cublas准备" class="headerlink" title="cublas准备"></a>cublas准备</h3><p>接下来代码进行和cublas相关的准备。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">std::mutex*     cublas_wrapper_mutex = <span class="keyword">new</span> std::<span class="built_in">mutex</span>();</span><br><span class="line">cublasMMWrapper cublas_wrapper =</span><br><span class="line">    <span class="built_in">cublasMMWrapper</span>(cublas_handle, cublaslt_handle, stream, cublas_algo_map, cublas_wrapper_mutex, &amp;allocator);</span><br></pre></td></tr></table></figure>
+<p>各参数具有如下意义：<br>cublas_handle：提供 cuBLAS 库的上下文句柄，管理基础矩阵运算（如 FP32&#x2F;FP16 GEMM），确保计算与 CUDA 流同步。<br>cublaslt_handle：提供 cuBLASLt 的上下文句柄，支持低精度计算（如 INT8）和灵活算法选择，优化 Tensor Core 利用率。<br>stream：绑定 CUDA 流，确保 cuBLAS 操作与自定义内核（如注意力计算）顺序执行，避免隐式同步。<br>cublas_algo_map：存储预配置的 cuBLASLt 算法映射表，针对不同矩阵尺寸（如 M&#x3D;1 或 M&#x3D;4096）自动选择最优计算路径。<br>cublas_wrapper_mutex：提供互斥锁，保证多线程&#x2F;多 GPU 环境下对 cuBLAS 句柄的线程安全访问，防止状态冲突。<br>allocator：绑定内存分配器，支持对齐分配和内存池复用，减少显存碎片化，优化大规模模型的内存管理。</p>
+<p>然后根据不同的数据类型<code>T</code>为<code>cublas_wrapper</code>设置不同的计算精度配置。</p>
+<h3 id="构造gpt-weights"><a href="#构造gpt-weights" class="headerlink" title="构造gpt_weights"></a>构造gpt_weights</h3><p>接下来代码对gpt_weights进行构造，并调用<code>loadModel</code>方法加载参数，可以看到这边参数就是普通的二进制序列化的，并不稀奇。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2024/09/08/postgraduate/crtp/" rel="prev" title="CRTP（奇异递归模板模式） - 编译期多态">
+      <i class="fa fa-chevron-left"></i> CRTP（奇异递归模板模式） - 编译期多态
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2025/03/19/postgraduate/ABQ-LLM_2/" rel="next" title="ABQ-LLM源码分析（2) - LlamaWeight">
+      ABQ-LLM源码分析（2) - LlamaWeight <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%89%8D%E8%A8%80"><span class="nav-number">1.</span> <span class="nav-text">前言</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#llama-example-cc-main"><span class="nav-number">2.</span> <span class="nav-text">llama_example.cc - main()</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#llama-example-cc-llama-example"><span class="nav-number">3.</span> <span class="nav-text">llama_example.cc - llama_example()</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B6%85%E5%8F%82%E6%95%B0"><span class="nav-number">3.1.</span> <span class="nav-text">超参数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E7%BB%93%E6%9E%84%E5%8F%82%E6%95%B0"><span class="nav-number">3.2.</span> <span class="nav-text">模型结构参数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%94%9F%E6%88%90%E7%AD%96%E7%95%A5%E5%8F%82%E6%95%B0"><span class="nav-number">3.3.</span> <span class="nav-text">生成策略参数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%82%E6%95%B0%E5%90%88%E6%B3%95%E6%80%A7%E7%9A%84%E6%A3%80%E6%9F%A5"><span class="nav-number">3.4.</span> <span class="nav-text">参数合法性的检查</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AF%BB%E5%8F%96%E5%81%9C%E6%AD%A2%E8%AF%8D%E5%92%8C%E5%9D%8F%E8%AF%8D"><span class="nav-number">3.5.</span> <span class="nav-text">读取停止词和坏词</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AF%BB%E5%8F%96%E5%BC%80%E5%A7%8B%E8%AF%8D"><span class="nav-number">3.6.</span> <span class="nav-text">读取开始词</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#prompt-learning"><span class="nav-number">3.7.</span> <span class="nav-text">prompt_learning</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%9Atask"><span class="nav-number">3.8.</span> <span class="nav-text">多task</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#stream%E4%B8%8Ehandle%E7%9A%84%E5%88%9B%E5%BB%BA"><span class="nav-number">3.9.</span> <span class="nav-text">stream与handle的创建</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Allocator%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86%E5%99%A8"><span class="nav-number">3.10.</span> <span class="nav-text">Allocator内存管理器</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%88%90%E5%91%98%E5%8F%98%E9%87%8F"><span class="nav-number">3.10.1.</span> <span class="nav-text">成员变量</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0"><span class="nav-number">3.10.2.</span> <span class="nav-text">构造函数</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%9E%90%E6%9E%84%E5%87%BD%E6%95%B0"><span class="nav-number">3.10.3.</span> <span class="nav-text">析构函数</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#malloc"><span class="nav-number">3.10.4.</span> <span class="nav-text">malloc()</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#free"><span class="nav-number">3.10.5.</span> <span class="nav-text">free()</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cublas%E5%87%86%E5%A4%87"><span class="nav-number">3.11.</span> <span class="nav-text">cublas准备</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9E%84%E9%80%A0gpt-weights"><span class="nav-number">3.12.</span> <span class="nav-text">构造gpt_weights</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Liu Yao"
+      src="/images/rain_1x1.jpg">
+  <!--
+  <p class="site-author-name" itemprop="name">Liu Yao</p>
+  -->
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">18</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Liu Yao</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

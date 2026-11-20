@@ -1,0 +1,59 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="474" viewBox="0 0 1080 474" role="img" aria-labelledby="title desc">
+  <title id="title">H8实测，TopK KV整块与分半交接</title>
+  <desc id="desc">原流程在19.36微秒进入整块QK函数，分半后在12.03微秒进入前半QK函数，同期AIV0正在调用后半KV Gather函数。</desc>
+  <rect x="0" y="0" width="1080" height="474" fill="white" />
+  <rect x="545" y="14" width="20" height="16" fill="#9ccbdc" />
+  <text x="574" y="29" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="start" font-size="17" font-weight="400">阶段函数调用</text>
+  <rect x="762" y="14" width="20" height="16" fill="#f4bf87" />
+  <text x="791" y="29" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="start" font-size="17" font-weight="400">等待KV就绪信号</text>
+  <line x1="94" y1="75" x2="94" y2="390" stroke="#e4e9ec" />
+  <text x="94" y="420" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="17" font-weight="400">0</text>
+  <line x1="250" y1="75" x2="250" y2="390" stroke="#e4e9ec" />
+  <text x="250" y="420" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="17" font-weight="400">4</text>
+  <line x1="406" y1="75" x2="406" y2="390" stroke="#e4e9ec" />
+  <text x="406" y="420" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="17" font-weight="400">8</text>
+  <line x1="562" y1="75" x2="562" y2="390" stroke="#e4e9ec" />
+  <text x="562" y="420" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="17" font-weight="400">12</text>
+  <line x1="718" y1="75" x2="718" y2="390" stroke="#e4e9ec" />
+  <text x="718" y="420" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="17" font-weight="400">16</text>
+  <line x1="874" y1="75" x2="874" y2="390" stroke="#e4e9ec" />
+  <text x="874" y="420" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="17" font-weight="400">20</text>
+  <line x1="1030" y1="75" x2="1030" y2="390" stroke="#e4e9ec" />
+  <text x="1030" y="420" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="17" font-weight="400">24</text>
+  <text x="16" y="50" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="start" font-size="22" font-weight="600">原流程：512行一起交接</text>
+  <text x="76" y="97" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="end" font-size="18" font-weight="600">AIC</text>
+  <rect x="296.79999999999956" y="77" width="551.4600000000005" height="28" fill="#f4bf87" />
+  <text x="572.5299999999999" y="96" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">等 KV</text>
+  <rect x="849.0399999999994" y="77" width="114.65999999999997" height="28" fill="#9ccbdc" />
+  <text x="906.3699999999994" y="96" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">QKᵀ</text>
+  <text x="76" y="142" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="end" font-size="18" font-weight="600">AIV0</text>
+  <rect x="114.27999999999929" y="122" width="711.3600000000004" height="28" fill="#9ccbdc" />
+  <text x="469.95999999999947" y="141" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">KV Gather</text>
+  <text x="76" y="187" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="end" font-size="18" font-weight="600">AIV1</text>
+  <rect x="94.0" y="167" width="667.6800000000002" height="28" fill="#9ccbdc" />
+  <text x="427.8400000000001" y="186" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">KV Gather</text>
+  <text x="16" y="231" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="start" font-size="22" font-weight="600">流水化：每256行交接一次</text>
+  <text x="76" y="278" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="end" font-size="18" font-weight="600">AIC</text>
+  <rect x="319.0300000000004" y="258" width="239.45999999999947" height="28" fill="#f4bf87" />
+  <text x="438.76000000000016" y="277" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">等前半 KV</text>
+  <rect x="606.8500000000003" y="258" width="315.1199999999993" height="28" fill="#f4bf87" />
+  <text x="764.4099999999999" y="277" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">等后半 KV</text>
+  <rect x="563.1700000000001" y="258" width="43.68000000000018" height="28" fill="#9ccbdc" />
+  <line x1="585.0100000000002" y1="258" x2="585.0100000000002" y2="247" stroke="#596a76" />
+  <text x="585.0100000000002" y="242" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="15" font-weight="400">前半 QKᵀ</text>
+  <rect x="922.75" y="258" width="36.659999999999854" height="28" fill="#9ccbdc" />
+  <line x1="941.0799999999999" y1="258" x2="941.0799999999999" y2="247" stroke="#596a76" />
+  <text x="941.0799999999999" y="242" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="15" font-weight="400">后半 QKᵀ</text>
+  <text x="76" y="323" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="end" font-size="18" font-weight="600">AIV0</text>
+  <rect x="172.7800000000004" y="303" width="370.5" height="28" fill="#9ccbdc" />
+  <text x="358.0300000000004" y="322" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">前半 KV Gather</text>
+  <rect x="543.2800000000004" y="303" width="355.67999999999904" height="28" fill="#9ccbdc" />
+  <text x="721.1199999999999" y="322" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">后半 KV Gather</text>
+  <text x="76" y="368" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="end" font-size="18" font-weight="600">AIV1</text>
+  <rect x="94.0" y="348" width="350.2199999999996" height="28" fill="#9ccbdc" />
+  <text x="269.1099999999998" y="367" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">前半 KV Gather</text>
+  <rect x="445.0" y="348" width="335.39999999999975" height="28" fill="#9ccbdc" />
+  <text x="612.6999999999998" y="367" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="16" font-weight="400">后半 KV Gather</text>
+  <text x="562" y="457" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle" font-size="17" font-weight="400">相对时间（µs），两次采样分别以首次进入 KV Gather 函数为零点</text>
+</svg>

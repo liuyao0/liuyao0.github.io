@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/san.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/san.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+<link rel="stylesheet" href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&display=swap&subset=latin,latin-ext">
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"liuyao0.github.io","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":false,"style":"flat"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.json"};
+  </script>
+
+  <meta name="description" content="GDN mixed batch中消除重复QKV重排这个PR是Qwen3.6 GDN路径上的内部性能优化，与前文的DFlash滑窗没有直接逻辑关系。它解决的问题可以概括为：  在一个同时包含decode token和prefill token的batch中，全部Q&#x2F;K&#x2F;V已经被重排过一次；旧代码又将最前面的decode token单独重排了一次。PR删掉第二次重排，直接复用第一次">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GDN mixed batch中避免重复QKV重排">
+<meta property="og:url" content="https://liuyao0.github.io/2026/08/03/vllm-ascend/elim_redundancy_rearrange/index.html">
+<meta property="og:site_name" content="Liu Yao&#39;s attic">
+<meta property="og:description" content="GDN mixed batch中消除重复QKV重排这个PR是Qwen3.6 GDN路径上的内部性能优化，与前文的DFlash滑窗没有直接逻辑关系。它解决的问题可以概括为：  在一个同时包含decode token和prefill token的batch中，全部Q&#x2F;K&#x2F;V已经被重排过一次；旧代码又将最前面的decode token单独重排了一次。PR删掉第二次重排，直接复用第一次">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://liuyao0.github.io/assets/before.jpg">
+<meta property="og:image" content="https://liuyao0.github.io/assets/after.png">
+<meta property="article:published_time" content="2026-08-03T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-11-20T08:46:12.341Z">
+<meta property="article:author" content="Liu Yao">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://liuyao0.github.io/assets/before.jpg">
+
+<link rel="canonical" href="https://liuyao0.github.io/2026/08/03/vllm-ascend/elim_redundancy_rearrange/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>GDN mixed batch中避免重复QKV重排 | Liu Yao's attic</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+<a target="_blank" rel="noopener" href="https://github.com/liuyao0" class="github-corner" aria-label="View source on GitHub"><svg width="80" height="80" viewBox="0 0 250 250" style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"/><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"/><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"/></svg></a><style>.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}@media (max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octocat-wave 560ms ease-in-out}}</style>
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Liu Yao's attic</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://liuyao0.github.io/2026/08/03/vllm-ascend/elim_redundancy_rearrange/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/rain_1x1.jpg">
+      <meta itemprop="name" content="Liu Yao">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Liu Yao's attic">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          GDN mixed batch中避免重复QKV重排
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-08-04 00:00:00" itemprop="dateCreated datePublished" datetime="2026-08-04T00:00:00+08:00">2026-08-04</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-11-20 16:46:12" itemprop="dateModified" datetime="2026-11-20T16:46:12+08:00">2026-11-20</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8E%A8%E7%90%86%E5%8A%A0%E9%80%9F/" itemprop="url" rel="index"><span itemprop="name">推理加速</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="GDN-mixed-batch中消除重复QKV重排"><a href="#GDN-mixed-batch中消除重复QKV重排" class="headerlink" title="GDN mixed batch中消除重复QKV重排"></a>GDN mixed batch中消除重复QKV重排</h1><p>这个PR是Qwen3.6 GDN路径上的内部性能优化，与前文的DFlash滑窗没有直接逻辑关系。它解决的问题可以概括为：</p>
+<blockquote>
+<p>在一个同时包含decode token和prefill token的batch中，全部Q&#x2F;K&#x2F;V已经被重排过一次；旧代码又将最前面的decode token单独重排了一次。PR删掉第二次重排，直接复用第一次的结果。</p>
+</blockquote>
+<h2 id="前因：continuous-batching会把prefill和decode放进同一个batch"><a href="#前因：continuous-batching会把prefill和decode放进同一个batch" class="headerlink" title="前因：continuous batching会把prefill和decode放进同一个batch"></a>前因：continuous batching会把prefill和decode放进同一个batch</h2><p>产生mixed batch的根本原因是<strong>continuous batching</strong>。<br>同一个scheduling step里可能同时包含：</p>
+<ul>
+<li>正在decode的请求，每个请求通常只有1个新token；</li>
+<li>正在prefill的请求，本轮处理完整prompt或一段prompt chunk。</li>
+</ul>
+<p>vLLM对这种batch有明确的排序约定：decode request在前，prefill request在后。<code>split_decodes_and_prefills()</code>利用这个顺序寻找两者的分界点。</p>
+<p>当前这个batch不包含speculative sequence时，假设GDN metadata builder给出<code>num_decode_tokens=D</code>和<code>num_prefill_tokens=P</code>，<code>mixed_qkv_non_spec</code>布局是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">mixed_qkv_non_spec</span><br><span class="line">|&lt;------ D个decode token ------&gt;|&lt;------------- P个prefill token -------------&gt;|</span><br><span class="line">[ d0 ][ d1 ] ... [ d(D-1) ]        [ p0 ][ p1 ][ p2 ] ... [ p(P-1) ]</span><br><span class="line"> ^                                  ^</span><br><span class="line"> 0                                  num_decode_tokens</span><br></pre></td></tr></table></figure>
+
+<p>只有同时存在这两类token时，<code>split_non_spec</code>才为<code>True</code>：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">split_non_spec = (</span><br><span class="line">    spec_sequence_masks <span class="keyword">is</span> <span class="literal">None</span></span><br><span class="line">    <span class="keyword">and</span> attn_metadata.num_prefills &gt; <span class="number">0</span></span><br><span class="line">    <span class="keyword">and</span> attn_metadata.num_decodes &gt; <span class="number">0</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<h2 id="mixed-batch为什么要再分成两条GDN路径"><a href="#mixed-batch为什么要再分成两条GDN路径" class="headerlink" title="mixed batch为什么要再分成两条GDN路径"></a>mixed batch为什么要再分成两条GDN路径</h2><p>GDN在prefill和decode阶段使用不同算子：</p>
+<ul>
+<li>decode只需要用一个新token递推已有状态，使用<code>npu_recurrent_gated_delta_rule</code>；</li>
+<li>prefill需要处理长序列，使用<code>chunk_gated_delta_rule</code>做分块并行。</li>
+</ul>
+<p>两者在前面的输入投影和因果Conv1D阶段可以共用mixed tensor，但进入Gated Delta Rule时必须分流：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">hidden_states</span><br><span class="line">     |</span><br><span class="line">     v</span><br><span class="line">in_proj_qkvz / in_proj_ba</span><br><span class="line">     |</span><br><span class="line">     v</span><br><span class="line">mixed_qkv_non_spec = [ decode prefix | prefill tail ]</span><br><span class="line">     |</span><br><span class="line">     v</span><br><span class="line">npu_causal_conv1d_custom              # 对整个non-spec mixed tensor处理</span><br><span class="line">     |</span><br><span class="line">     v</span><br><span class="line">rearrange_mixed_qkv                    # 整个batch拆成Q、K、V</span><br><span class="line">     |</span><br><span class="line">     +------------------------------+</span><br><span class="line">     |                              |</span><br><span class="line">     v                              v</span><br><span class="line">decode prefix                    prefill tail</span><br><span class="line">npu_recurrent_gated_delta_rule   chunk_gated_delta_rule</span><br><span class="line">     |                              |</span><br><span class="line">     +---------------+--------------+</span><br><span class="line">                     v</span><br><span class="line">          cat([decode_out, prefill_out])</span><br></pre></td></tr></table></figure>
+
+<h2 id="rearrange-mixed-qkv-的行为"><a href="#rearrange-mixed-qkv-的行为" class="headerlink" title="rearrange_mixed_qkv()的行为"></a><code>rearrange_mixed_qkv()</code>的行为</h2><p>输入<code>mixed_qkv_non_spec</code>是形如<code>[N, q_dim + k_dim + v_dim]</code>的打包tensor。decode和prefill的两个GDN kernel则需要的是分开且连续存储的Q、K、V，形状为<code>[1, N, heads, head_dim]</code>。</p>
+<p>因此，需要在<code>GatedDeltaNetAttention.rearrange_mixed_qkv()</code>中重排QKV的内存结构：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">重排前（按token打包）：</span><br><span class="line">[ Q0 K0 V0 ][ Q1 K1 V1 ][ Q2 K2 V2 ]</span><br><span class="line"></span><br><span class="line">torch.cat之后（按Q/K/V分区且连续）：</span><br><span class="line">[ Q0 Q1 Q2 ][ K0 K1 K2 ][ V0 V1 V2 ]</span><br></pre></td></tr></table></figure>
+
+<p>具体实现为先用<code>torch.split</code>拆出Q&#x2F;K&#x2F;V，然后用<code>torch.cat</code>将三者复制到一块新的连续buffer：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">query, key, value = torch.split(</span><br><span class="line">    mixed_qkv, [q_dim, k_dim, v_dim], dim=-<span class="number">1</span></span><br><span class="line">)</span><br><span class="line">fused = torch.cat(</span><br><span class="line">    [query.reshape(-<span class="number">1</span>), key.reshape(-<span class="number">1</span>), value.reshape(-<span class="number">1</span>)], dim=<span class="number">0</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>随后再将这块buffer分别view成Q、K、V：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">query = q_contig.view(<span class="number">1</span>, seq_len, -<span class="number">1</span>, <span class="variable language_">self</span>.head_k_dim)</span><br><span class="line">key = k_contig.view(<span class="number">1</span>, seq_len, -<span class="number">1</span>, <span class="variable language_">self</span>.head_k_dim)</span><br><span class="line">value = v_contig.view(<span class="number">1</span>, seq_len, -<span class="number">1</span>, <span class="variable language_">self</span>.head_v_dim)</span><br></pre></td></tr></table></figure>
+
+<p>其中间的<code>torch.cat</code>会真正带来对内存的读取和写入。</p>
+<h2 id="旧代码的冗余操作"><a href="#旧代码的冗余操作" class="headerlink" title="旧代码的冗余操作"></a>旧代码的冗余操作</h2><p>在所有non-spec token完成Conv1D后，旧代码先对整个<code>mixed_qkv_non_spec</code>执行了一次重排：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">query_non_spec, key_non_spec, value_non_spec = (</span><br><span class="line">    <span class="variable language_">self</span>.rearrange_mixed_qkv(mixed_qkv_non_spec)</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>此时<code>query_non_spec</code>、<code>key_non_spec</code>和<code>value_non_spec</code>中已经同时包含decode token和prefill token，因此此时prefill token和decode token的QKV重排都已经完成。然而，在decode分支，代码又从最初的混合QKV中切片取出了取出decode token并再一次进行QKV：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">query_decode, key_decode, value_decode = <span class="variable language_">self</span>.rearrange_mixed_qkv(</span><br><span class="line">    mixed_qkv_non_spec[:num_decode_tokens]</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>因此旧路径实际是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">R([decode | prefill]) -&gt; [Q decode | Q prefill, K decode | K prefill, V decode | V prefill]</span><br><span class="line">R([decode])           -&gt; [Q_decode, K_decode, V_decode]  # 重复copy</span><br></pre></td></tr></table></figure>
+
+<p>其中$R$表示<code>rearrange_mixed_qkv()</code>。第二次调用生成的值其实已经存在第一次调用的输出中。</p>
+<p>修改前的profiling timeline也能直接看到这两段工作：第一段重排整个non-spec mixed batch，紧接着第二段又重排decode prefix。</p>
+<p><img src="/assets/before.jpg" alt="修改前：mixed batch和decode prefix分别执行QKV重排"></p>
+<p><em>修改前：同一个GDN <code>forward_core</code>中出现两次QKV rearrange，第二次是对decode prefix的重复处理。</em></p>
+<h2 id="如何修改"><a href="#如何修改" class="headerlink" title="如何修改"></a>如何修改</h2><p>不再对<code>mixed_qkv_non_spec[:num_decode_tokens]</code>做第二次重排，而是直接截取第一次重排结果的decode prefix：</p>
+<figure class="highlight diff"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="deletion">-query_decode, key_decode, value_decode = self.rearrange_mixed_qkv(</span></span><br><span class="line"><span class="deletion">-    mixed_qkv_non_spec[:num_decode_tokens]</span></span><br><span class="line"><span class="deletion">-)</span></span><br><span class="line"><span class="addition">+query_decode = query_non_spec[:, :num_decode_tokens]</span></span><br><span class="line"><span class="addition">+key_decode = key_non_spec[:, :num_decode_tokens]</span></span><br><span class="line"><span class="addition">+value_decode = value_non_spec[:, :num_decode_tokens]</span></span><br></pre></td></tr></table></figure>
+
+<p>这里的第0维是<code>rearrange_mixed_qkv()</code>添加的大小为1的维度，第1维才是token维，所以代码使用<code>[:, :num_decode_tokens]</code>。这些切片是已有Q&#x2F;K&#x2F;V buffer的view，不会再执行QKV拷贝。</p>
+<p>整个路径现在变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">                           rearrange一次</span><br><span class="line">mixed_qkv_non_spec --------------------------------&gt; Q_all / K_all / V_all</span><br><span class="line">                                                        |</span><br><span class="line">                              +-------------------------+------------------------+</span><br><span class="line">                              |                                                  |</span><br><span class="line">                              v                                                  v</span><br><span class="line">                    [:, :num_decode_tokens]                            [:, num_decode_tokens:]</span><br><span class="line">                         decode view                                       prefill view</span><br><span class="line">                              |                                                  |</span><br><span class="line">                              v                                                  v</span><br><span class="line">                      recurrent GDN                                         chunk GDN</span><br></pre></td></tr></table></figure>
+
+<p>修改后的timeline中，第二段decode-prefix rearrange不再出现；第一次full-batch rearrange产生的Q&#x2F;K&#x2F;V直接进入decode的L2Norm和recurrent GDN路径。</p>
+<p><img src="/assets/after.png" alt="修改后：decode直接复用full-batch QKV的前缀"></p>
+<p><em>修改后：decode仅创建Q&#x2F;K&#x2F;V前缀view，不再启动第二个QKV copy kernel。</em></p>
+<p>这个复用成立依赖三个前提：</p>
+<ol>
+<li>vLLM保证decode token是non-spec batch的连续前缀；</li>
+<li><code>rearrange_mixed_qkv()</code>只改变Q&#x2F;K&#x2F;V布局，不跨token计算；</li>
+<li>decode分支只读取这些view。后面的<code>query_non_spec = query_non_spec[:, D:]</code>只是让局部变量改为指向prefill后缀，不会改写decode view的底层数据。</li>
+</ol>
+<p>因此，这个PR不会改变Q&#x2F;K&#x2F;V、GDN状态更新顺序或最终输出。</p>
+<h2 id="理论性能收益分析"><a href="#理论性能收益分析" class="headerlink" title="理论性能收益分析"></a>理论性能收益分析</h2><p>这个修改每次命中mixed batch时，会在<strong>每个GDN层</strong>中减少：</p>
+<ul>
+<li>1次<code>rearrange_mixed_qkv()</code>调用；</li>
+<li>1次编译后的QKV copy kernel launch；</li>
+<li>$D×(q_{dim}+k_{dim}+v_{dim})$个元素的读取和写入，其中$D$是当前batch的decode token数。</li>
+</ul>
+<p>Qwen3.6-27B有48个GDN层。以BF16、<code>TP=2</code>为例，每个rank上：</p>
+<p>$$<br>q_{dim}+k_{dim}+v_{dim}&#x3D;1024+1024+3072&#x3D;5120,<br>$$</p>
+<p>所以每个decode token每层需要被重排的数据是$5120\times2&#x3D;10240$ byte，即10 KiB。如果decode concurrency为64，且每个decode request在本轮贡献1个token，旧路径每个GDN层的重复copy输出约为640 KiB；48个GDN层合计约30 MiB写入。若把读取原Q&#x2F;K&#x2F;V也算入HBM流量，则约为60 MiB&#x2F;次model step&#x2F;每个TP rank。</p>
+<h3 id="Ascend-NPU正确性验证"><a href="#Ascend-NPU正确性验证" class="headerlink" title="Ascend NPU正确性验证"></a>Ascend NPU正确性验证</h3><p>在<code>Qwen3.6-27B</code>、2张Ascend 910B、<code>TP=2</code>、禁用投机解码、开启chunked prefill的环境中，构造了1个decode token + 4095个prefill token的mixed batch，在同一次model execution中对比旧路径和新路径。</p>
+<p>结果是：</p>
+<ul>
+<li>Q&#x2F;K&#x2F;V完全一致；</li>
+<li>L2Norm后的Q&#x2F;K完全一致；</li>
+<li>recurrent GDN输出和更新后的state中，NaN出现的位置一致，所有有限值逐bit一致。</li>
+</ul>
+<p>这说明复用view没有引入数值误差，也没有改变GDN的输出状态。NaN mask一致的描述并不是说这个PR制造了NaN，而是验证时将原路径已有的NaN也纳入了严格对比。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2026/07/28/vllm-ascend/DFlash/" rel="prev" title="DFlash BugFix">
+      <i class="fa fa-chevron-left"></i> DFlash BugFix
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2026/08/03/vllm-ascend/Qwen3.6-Dense-GDN/" rel="next" title="Qwen3.6 Dense的GDN前传与vLLM-Ascend实现">
+      Qwen3.6 Dense的GDN前传与vLLM-Ascend实现 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#GDN-mixed-batch%E4%B8%AD%E6%B6%88%E9%99%A4%E9%87%8D%E5%A4%8DQKV%E9%87%8D%E6%8E%92"><span class="nav-number">1.</span> <span class="nav-text">GDN mixed batch中消除重复QKV重排</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%89%8D%E5%9B%A0%EF%BC%9Acontinuous-batching%E4%BC%9A%E6%8A%8Aprefill%E5%92%8Cdecode%E6%94%BE%E8%BF%9B%E5%90%8C%E4%B8%80%E4%B8%AAbatch"><span class="nav-number">1.1.</span> <span class="nav-text">前因：continuous batching会把prefill和decode放进同一个batch</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#mixed-batch%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%86%8D%E5%88%86%E6%88%90%E4%B8%A4%E6%9D%A1GDN%E8%B7%AF%E5%BE%84"><span class="nav-number">1.2.</span> <span class="nav-text">mixed batch为什么要再分成两条GDN路径</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#rearrange-mixed-qkv-%E7%9A%84%E8%A1%8C%E4%B8%BA"><span class="nav-number">1.3.</span> <span class="nav-text">rearrange_mixed_qkv()的行为</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%97%A7%E4%BB%A3%E7%A0%81%E7%9A%84%E5%86%97%E4%BD%99%E6%93%8D%E4%BD%9C"><span class="nav-number">1.4.</span> <span class="nav-text">旧代码的冗余操作</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%A6%82%E4%BD%95%E4%BF%AE%E6%94%B9"><span class="nav-number">1.5.</span> <span class="nav-text">如何修改</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%90%86%E8%AE%BA%E6%80%A7%E8%83%BD%E6%94%B6%E7%9B%8A%E5%88%86%E6%9E%90"><span class="nav-number">1.6.</span> <span class="nav-text">理论性能收益分析</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Ascend-NPU%E6%AD%A3%E7%A1%AE%E6%80%A7%E9%AA%8C%E8%AF%81"><span class="nav-number">1.6.1.</span> <span class="nav-text">Ascend NPU正确性验证</span></a></li></ol></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Liu Yao"
+      src="/images/rain_1x1.jpg">
+  <!--
+  <p class="site-author-name" itemprop="name">Liu Yao</p>
+  -->
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">18</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Liu Yao</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

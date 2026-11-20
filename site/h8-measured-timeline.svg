@@ -1,0 +1,87 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">H8实测流水线，query 8的TopK块tile 17</title>
+  <desc id="desc">两路AIV从0微秒左右开始KV Gather。AIC从5.29到12.79微秒等待KV，之后下发QKᵀ。AIC在18.69到18.91微秒等P，随后下发PV。</desc>
+  <rect x="0" y="0" width="1200" height="420" fill="white" />
+  <text x="18" y="32" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="24" text-anchor="start" font-weight="600">query 8 的 TopK 块（tile 17）</text>
+  <rect x="598" y="16" width="21" height="16" fill="#98cadd" />
+  <text x="628" y="31" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="start" font-weight="400">tile 17 阶段函数调用</text>
+  <rect x="815" y="16" width="21" height="16" fill="#f4bf87" />
+  <text x="845" y="31" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="start" font-weight="400">tile 17 等信号</text>
+  <rect x="1008" y="16" width="21" height="16" fill="#e3e8eb" />
+  <text x="1038" y="31" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="start" font-weight="400">相邻 tile</text>
+  <line x1="87" y1="62" x2="87" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="87" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">0</text>
+  <line x1="219" y1="62" x2="219" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="219" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">4</text>
+  <line x1="351" y1="62" x2="351" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="351" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">8</text>
+  <line x1="483" y1="62" x2="483" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="483" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">12</text>
+  <line x1="615" y1="62" x2="615" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="615" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">16</text>
+  <line x1="747" y1="62" x2="747" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="747" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">20</text>
+  <line x1="879" y1="62" x2="879" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="879" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">24</text>
+  <line x1="1011" y1="62" x2="1011" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="1011" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">28</text>
+  <line x1="1143" y1="62" x2="1143" y2="337" stroke="#e5e9ed" stroke-width="1.25" />
+  <text x="1143" y="361" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">32</text>
+  <text x="71" y="133" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="21" text-anchor="end" font-weight="600">AIC</text>
+  <text x="71" y="220" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="21" text-anchor="end" font-weight="600">AIV0</text>
+  <text x="71" y="301" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="21" text-anchor="end" font-weight="600">AIV1</text>
+  <rect x="87" y="109" width="167.30999999999977" height="34" fill="#e3e8eb" />
+  <rect x="604.1100000000006" y="109" width="44.219999999999175" height="34" fill="#e3e8eb" />
+  <rect x="261.5699999999997" y="109" width="247.5" height="34" fill="#f4bf87" />
+  <rect x="509.0699999999997" y="109" width="93.06000000000071" height="34" fill="#98cadd" />
+  <rect x="703.77" y="109" width="7.2599999999999625" height="34" fill="#f4bf87" />
+  <rect x="711.0299999999999" y="109" width="157.74000000000004" height="34" fill="#98cadd" />
+  <rect x="678.6900000000003" y="109" width="23.099999999999625" height="34" fill="#e3e8eb" />
+  <rect x="876.0299999999999" y="109" width="240.90000000000038" height="34" fill="#e3e8eb" />
+  <rect x="1116.9300000000003" y="109" width="49.16999999999983" height="34" fill="#e3e8eb" />
+  <rect x="505.4400000000002" y="196" width="5.2799999999998875" height="34" fill="#e3e8eb" />
+  <rect x="490.9200000000003" y="196" width="11.879999999999512" height="34" fill="#e3e8eb" />
+  <rect x="683.6400000000004" y="196" width="26.399999999999437" height="34" fill="#e3e8eb" />
+  <rect x="710.0399999999998" y="196" width="1.980000000000075" height="34" fill="#e3e8eb" />
+  <rect x="90.29999999999981" y="196" width="397.9800000000001" height="34" fill="#98cadd" />
+  <rect x="546.3600000000006" y="196" width="120.77999999999989" height="34" fill="#f4bf87" />
+  <rect x="667.1400000000004" y="196" width="13.859999999999587" height="34" fill="#98cadd" />
+  <rect x="1115.9400000000003" y="196" width="5.2799999999998875" height="34" fill="#98cadd" />
+  <rect x="543.7200000000001" y="196" width="0.6600000000003376" height="34" fill="#e3e8eb" />
+  <rect x="1101.4200000000003" y="196" width="12.53999999999985" height="34" fill="#e3e8eb" />
+  <rect x="543.0599999999997" y="196" width="0.6600000000003376" height="34" fill="#e3e8eb" />
+  <rect x="718.6200000000005" y="196" width="380.8199999999997" height="34" fill="#e3e8eb" />
+  <rect x="1149.6000000000006" y="196" width="16.49999999999953" height="34" fill="#e3e8eb" />
+  <rect x="1146.2999999999997" y="196" width="0.6600000000003376" height="34" fill="#e3e8eb" />
+  <rect x="461.22000000000014" y="277" width="0.6600000000003376" height="34" fill="#e3e8eb" />
+  <rect x="458.5799999999997" y="277" width="0.6600000000003376" height="34" fill="#e3e8eb" />
+  <rect x="669.1200000000005" y="277" width="40.25999999999996" height="34" fill="#e3e8eb" />
+  <rect x="709.3800000000005" y="277" width="0.6599999999993997" height="34" fill="#e3e8eb" />
+  <rect x="87" y="277" width="369.6000000000006" height="34" fill="#98cadd" />
+  <rect x="502.14000000000044" y="277" width="164.33999999999966" height="34" fill="#f4bf87" />
+  <rect x="666.48" y="277" width="0.6600000000003376" height="34" fill="#98cadd" />
+  <rect x="498.8399999999997" y="277" width="0.6600000000003376" height="34" fill="#e3e8eb" />
+  <rect x="1081.6200000000003" y="277" width="0.6599999999993997" height="34" fill="#e3e8eb" />
+  <rect x="715.98" y="277" width="363.6600000000003" height="34" fill="#e3e8eb" />
+  <rect x="1119.9000000000003" y="277" width="46.19999999999972" height="34" fill="#e3e8eb" />
+  <rect x="1117.26" y="277" width="0.6600000000003376" height="34" fill="#e3e8eb" />
+  <text x="289.28999999999985" y="219" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" text-anchor="middle" font-weight="400">KV Gather</text>
+  <text x="606.7500000000005" y="219" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" text-anchor="middle" font-weight="400">等 QKᵀ</text>
+  <text x="909.0300000000003" y="219" fill="#596a76" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" text-anchor="middle" font-weight="400">tile 19 的 KV Gather</text>
+  <text x="271.8000000000003" y="300" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" text-anchor="middle" font-weight="400">KV Gather</text>
+  <text x="584.3100000000002" y="300" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" text-anchor="middle" font-weight="400">等 QKᵀ</text>
+  <text x="897.8100000000003" y="300" fill="#596a76" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" text-anchor="middle" font-weight="400">tile 19 的 KV Gather</text>
+  <text x="385.3199999999997" y="132" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" text-anchor="middle" font-weight="600">等 KV  7.50 µs</text>
+  <text x="555.6000000000001" y="132" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" text-anchor="middle" font-weight="600">QKᵀ</text>
+  <text x="789.8999999999999" y="132" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" text-anchor="middle" font-weight="600">PV</text>
+  <text x="170.6549999999999" y="132" fill="#596a76" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" text-anchor="middle" font-weight="400">tile 15 的 PV</text>
+  <text x="996.48" y="132" fill="#596a76" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" text-anchor="middle" font-weight="400">tile 19 等 KV</text>
+  <line x1="707.4" y1="109" x2="707.4" y2="84" stroke="#667889" stroke-width="1.25" />
+  <text x="707.4" y="77" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">等 P  0.22 µs</text>
+  <line x1="674.0699999999999" y1="196" x2="704.1" y2="171" stroke="#667889" stroke-width="1.25" />
+  <text x="704.1" y="164" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">Softmax产生P</text>
+  <line x1="1118.58" y1="196" x2="1123.2" y2="171" stroke="#667889" stroke-width="1.25" />
+  <text x="1123.2" y="164" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="17" text-anchor="middle" font-weight="400">下发写回 O</text>
+  <text x="615" y="402" fill="#19354a" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" text-anchor="middle" font-weight="400">相对时间（µs）</text>
+</svg>
