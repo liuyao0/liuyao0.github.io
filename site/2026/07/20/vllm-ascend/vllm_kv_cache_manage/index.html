@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/san.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/san.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+<link rel="stylesheet" href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&display=swap&subset=latin,latin-ext">
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"liuyao0.github.io","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":false,"style":"flat"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.json"};
+  </script>
+
+  <meta name="description" content="简单来说，vLLM在启动时一次性申请一组大块的GPU显存作为KV Cache，然后把它切成固定大小的block；Scheduler 会管理“请求使用哪些 block”，Attention kernel则会往对应位置写入和读取 KV。 在EngineCore的初始化函数中，会调用自身的_initialize_kv_caches()方法： 1kv_cache_config &#x3D; self._initia">
+<meta property="og:type" content="article">
+<meta property="og:title" content="vLLM的KV Cache管理">
+<meta property="og:url" content="https://liuyao0.github.io/2026/07/20/vllm-ascend/vllm_kv_cache_manage/index.html">
+<meta property="og:site_name" content="Liu Yao&#39;s attic">
+<meta property="og:description" content="简单来说，vLLM在启动时一次性申请一组大块的GPU显存作为KV Cache，然后把它切成固定大小的block；Scheduler 会管理“请求使用哪些 block”，Attention kernel则会往对应位置写入和读取 KV。 在EngineCore的初始化函数中，会调用自身的_initialize_kv_caches()方法： 1kv_cache_config &#x3D; self._initia">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-07-19T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-11-20T08:47:52.832Z">
+<meta property="article:author" content="Liu Yao">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://liuyao0.github.io/2026/07/20/vllm-ascend/vllm_kv_cache_manage/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>vLLM的KV Cache管理 | Liu Yao's attic</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+<a target="_blank" rel="noopener" href="https://github.com/liuyao0" class="github-corner" aria-label="View source on GitHub"><svg width="80" height="80" viewBox="0 0 250 250" style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"/><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"/><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"/></svg></a><style>.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}@media (max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octocat-wave 560ms ease-in-out}}</style>
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Liu Yao's attic</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://liuyao0.github.io/2026/07/20/vllm-ascend/vllm_kv_cache_manage/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/rain_1x1.jpg">
+      <meta itemprop="name" content="Liu Yao">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Liu Yao's attic">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          vLLM的KV Cache管理
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-07-20 00:00:00" itemprop="dateCreated datePublished" datetime="2026-07-20T00:00:00+08:00">2026-07-20</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-11-20 16:47:52" itemprop="dateModified" datetime="2026-11-20T16:47:52+08:00">2026-11-20</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8E%A8%E7%90%86%E5%8A%A0%E9%80%9F/" itemprop="url" rel="index"><span itemprop="name">推理加速</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>简单来说，vLLM在启动时一次性申请一组大块的GPU显存作为KV Cache，然后把它切成固定大小的<code>block</code>；Scheduler 会管理“请求使用哪些 block”，Attention kernel则会往对应位置写入和读取 KV。</p>
+<p>在<code>EngineCore</code>的初始化函数中，会调用自身的<code>_initialize_kv_caches()</code>方法：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">kv_cache_config = <span class="variable language_">self</span>._initialize_kv_caches(vllm_config)</span><br></pre></td></tr></table></figure>
+
+<p>该函数首先查询每个<code>Worker</code>上哪些层需要KV Cache，调用链是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">EngineCore._initialize_kv_caches()</span><br><span class="line">  -&gt; model_executor.get_kv_cache_specs()</span><br><span class="line">  -&gt; collective_rpc(&quot;get_kv_cache_spec&quot;)</span><br><span class="line">  -&gt; GPUWorker.get_kv_cache_spec()</span><br><span class="line">  -&gt; GPUModelRunner.get_kv_cache_spec()</span><br><span class="line">  -&gt; dict[layer_name, KVCacheSpec]</span><br></pre></td></tr></table></figure>
+
+<p><code>KVCacheSpec</code>称为“KV Cache层规格”，表示某一层保存一个block的KV Cache时，要保存多少个token、占多少字节，以及保留多长的上下文。<code>model_executor.get_kv_cache_specs()</code>此时返回的是<code>list[dict[layer_name, KVCacheSpec]]</code>：列表中每个字典对应一个<code>Worker</code>。这一步只是收集，还没有把所有<code>Worker</code>的结果合并成全模型规格。</p>
+<p>调用链中的<code>collective_rpc()</code>是<code>model_executor</code>向所有<code>Worker</code>下发同一个方法、再收集所有返回值的入口。</p>
+<p><code>GPUModelRunner.get_kv_cache_spec()</code>首先从已经创建的模型中找出所有需要KV Cache的层：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">layer_type = cast(<span class="built_in">type</span>[<span class="type">Any</span>], AttentionLayerBase)</span><br><span class="line">attn_layers = get_layers_from_vllm_config(<span class="variable language_">self</span>.vllm_config, layer_type)</span><br></pre></td></tr></table></figure>
+<p>这里比较奇怪的是，为什么会需要从<code>vllm_config</code>取Attention层对象。事实上，这是因为模型在初始化时将层注册到了<code>vllm_config.compilation_config</code>的<code>static_forward_context</code>中。注册完成后的<code>static_forward_context</code>类似于：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">vllm_config.compilation_config.static_forward_context = &#123;</span><br><span class="line">    <span class="string">&quot;model.layers.0.attn&quot;</span>: layer0_attention_object,</span><br><span class="line">    <span class="string">&quot;model.layers.1.attn&quot;</span>: layer1_attention_object,</span><br><span class="line">    <span class="string">&quot;model.layers.2.attn&quot;</span>: layer2_attention_object,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在抽取出所有Attention层后，函数会对所有Attention层进行遍历。<br>如果该层的KV Cache复用其他层的，那么记录复用关系；如果该层需要自己拥有KV Cache，则获取KV Cache的配置并记录到字典内。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> <span class="built_in">isinstance</span>(attn_module, Attention) <span class="keyword">and</span> (</span><br><span class="line">    kv_tgt_layer := attn_module.kv_sharing_target_layer_name</span><br><span class="line">):</span><br><span class="line">    <span class="variable language_">self</span>.shared_kv_cache_layers[layer_name] = kv_tgt_layer</span><br><span class="line">    <span class="keyword">continue</span></span><br><span class="line"><span class="keyword">if</span> spec := attn_module.get_kv_cache_spec(<span class="variable language_">self</span>.vllm_config):</span><br><span class="line">    kv_cache_spec[layer_name] = spec</span><br></pre></td></tr></table></figure>
+<p>在Attention层的<code>get_kv_cache_spec</code>函数中，其会根据当前层的类型（普通注意力、SWA、TQA……），使用各项参数构造并返回KV Cache配置。<br>如果该层复用另一层的KV Cache，这里只记录复用关系，不为它单独创建层规格。如果该层需要自己的KV Cache，就调用它的<code>get_kv_cache_spec()</code>；返回<code>None</code>表示它不需要独立KV Cache，否则把返回的层规格记入字典。</p>
+<p>以普通注意力层为例，假设一个block保存16个token，有8个存放K&#x2F;V的头（KV head），每个head的维度是128，K和V都使用16位浮点数（FP16），那么该层为一个block保存KV所需的字节数是：</p>
+<p>$$<br>2\times16\times8\times128\times2&#x3D;65536\text{ bytes}&#x3D;64\text{ KiB}.<br>$$</p>
+<p>第一个2表示K和V，最后一个2表示每个FP16元素占2字节。DeepSeek V4的多头潜在注意力（MLA）使用压缩后的自定义布局，不能直接套用这个普通注意力公式；它由<code>MLAAttentionSpec.real_page_size_bytes</code>根据压缩比例和实际存储布局计算。</p>
+<p>接下来，<code>_initialize_kv_caches()</code>调用<code>model_executor.determine_available_memory()</code>，让每个<code>Worker</code>计算可以分给KV Cache池的显存。</p>
+<p>如果用户显式设置了<code>kv_cache_memory_bytes</code>，<code>GPUWorker</code>仍会运行一次<code>profile_run()</code>，以便按单轮调度最多处理的token数<code>max_num_batched_tokens</code>编译和预热模型，然后直接返回用户指定的字节数。另一个长度配置<code>max_model_len</code>表示单个请求允许的最大模型长度。这个分支不会自动重新估算KV Cache池应该有多大，指定得过大仍可能在后续分配时出现显存不足（OOM）。</p>
+<p>如果没有指定，<code>GPUWorker</code>就用一次带虚拟输入的模型前向计算测量模型权重之外的显存峰值。“激活值峰值”是模型前向计算期间PyTorch额外分配的峰值；“非PyTorch显存”是NCCL通信库、自定义内核等没有记在PyTorch显存分配器上的额外显存；“CUDA图显存”是为后续CUDA Graph执行模式预留的估算值。在默认启用CUDA Graph显存估算的CUDA路径中，计算可以简化为：</p>
+<p>$$<br>\text{KV Cache可用显存}<br>&#x3D;\text{GPU总显存}\times\text{gpu_memory_utilization}<br>-\text{模型权重}<br>-\text{激活值峰值}<br>-\text{非PyTorch显存}<br>-\text{CUDA图显存}.<br>$$</p>
+<p>如果没有启用CUDA Graph、关闭了对应的显存估算开关，或者使用ROCm、XPU等不执行这项估算的后端，最后一项按0计算。</p>
+<p>例如，某个<code>Worker</code>所在GPU有24GiB显存，用户允许vLLM使用的显存比例<code>gpu_memory_utilization=0.9</code>，模型权重占14GiB，测得激活值峰值、非PyTorch显存和CUDA图显存分别是1.2GiB、0.4GiB和0.5GiB，那么可分给KV Cache池的显存约为：</p>
+<p>$$<br>24\times0.9-14-1.2-0.4-0.5&#x3D;5.5\text{ GiB}.<br>$$</p>
+<p><code>max_num_batched_tokens</code>会影响这次forward的激活值峰值，也会影响<code>SWA</code>缓存在一次调度中最多需要接纳多少个新token。它不是直接代入“每层KV Cache池大小”的公式。</p>
+<p>此时，<code>EngineCore</code>拿到了两个长度相同的列表：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">kv_cache_specs = [</span><br><span class="line">    &#123;<span class="string">&quot;层名&quot;</span>: worker0上该层的KVCacheSpec, ...&#125;,</span><br><span class="line">    &#123;<span class="string">&quot;层名&quot;</span>: worker1上该层的KVCacheSpec, ...&#125;,</span><br><span class="line">]</span><br><span class="line"></span><br><span class="line">available_gpu_memory = [</span><br><span class="line">    worker0的KV Cache可用显存,</span><br><span class="line">    worker1的KV Cache可用显存,</span><br><span class="line">]</span><br></pre></td></tr></table></figure>
+
+<p>因此此时可以调用<code>get_kv_cache_configs()</code>生成各Worker上的KV Cache具体配置：</p>
+<ul>
+<li>合并所有 Worker 的层规格。</li>
+<li>根据 PP 切分，确定每个 Worker 实际负责哪些层。</li>
+<li>计算每个 block 占多少字节。</li>
+<li>计算每个 Worker 能分配多少个 block。</li>
+<li>所有 Worker 统一采用最少的 block 数量。</li>
+</ul>
+<p>这里出现了block的概念。vLLM是以block为单位管理KV Cache的。一个block的<code>block_size</code>代表这个block存放多少个token的KV Cache，而某一层的一个block存放KV的物理空间称为<code>page</code>，理论所需<code>page</code>的字节数为<code>real_page_size_bytes</code>，而实际上，由于不同层的<code>real_page_size_bytes</code>不尽相同，vLLM会将这些<code>real_page_size_bytes</code>进行分桶对齐，如<code>[84KiB,96KiB,100KiB,192KiB,200KiB]</code>分桶对齐到<code>[100KiB,200KiB]</code>，记为<code>page_size_bytes</code>。</p>
+<p>现在假设一个简单的模型，其所有自注意力层都是完全相同的全量自注意力层，共$L$层。我们为这个模型每层都分配一些block用于存放KVCache：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Layer 0: block 0, block 1, block 2, ……</span><br><span class="line">Layer 1: block 0, block 1, block 2, ……</span><br><span class="line">……</span><br></pre></td></tr></table></figure>
+
+<p>此时我们会发现，在各层申请和释放block时，可以选择完全相同的block。<br>在系统刚刚启动，没有任何block被占用的情况下，假设某一个请求只需要3个block，那么我们可以为每一层都分配block 0<del>3；假设这个请求消亡了，那么我们可以在每一层都同步地释放block 0</del>3；只要保证每次申请和释放时都在每层使用相同的block id，那么每层不同block id的block的占用情况就是一样的，我们可以继续每次申请和释放时都在每层使用相同的block id。</p>
+<p>vLLM正是发现了这一点，因此会将生命周期相同的注意力层的block分在一个<code>block group</code>中，使用相同的block表，即这些层占用的block的id、空闲的block的id、某个request对应的KV Cache的block完全相同，那么，他们就可以使用统一的全局block编号。</p>
+<p>那么，一个全局block的编号就会占用$L * \textit{real_page_size_bytes}$字节的空间；使用总KV Cache可用空间除以这个数，就能得到可用的block ID数。</p>
+<p>然而，在DeepSeek V4这样的模型中，注意力机制有多种：C128、C4、SWA、Indexer。这些不同的注意力算子又各自拥有不同的生命周期不同，因此他们不能同时申请和释放同ID的block。</p>
+<p>例如，同一个请求已经生成了足够多的token，全量注意力和SWA最初都使用了block 3来保存较早token的KV Cache。此时，SWA的滑动窗口已经越过这些token，不再需要block 3，可以将其释放并复用；但全量注意力后续仍可能关注这些token，所以必须继续保留block 3。两者对block 3的释放时机不同，因而不能共用一张block table并同步申请、释放同一组block id。</p>
+<p>vLLM将生命周期相同的一组注意力层分到一个<code>block group</code>中，各自在组内共享block table。那么，难道我们需要为不同<code>group</code>的注意力层分别建立一套block管理系统，分别为他们建立内存池吗？vLLM认为这会导致我们每多一种注意力，就需要增加一个管理系统的实例，还需要协调不同类型注意力的内存占用情况。</p>
+<p>vLLM希望，各种不同group的注意力层能够从同一个全局的<code>block</code>池中取<code>block</code>。例如，某个模型有10层全量注意力，5层滑窗注意力，他们分属不同的<code>block group</code>，但是在一次前传中，它们分别从全局<code>block</code>池中取了<code>block 3~22</code>和<code>block 31~35</code>来保存新产生的Cache。如果现在由全量注意力使用<code>block 3~22</code>被释放了，这些block可以既被其他请求的全量注意力或其他请求的滑窗注意力使用。</p>
+<p>要实现这一点，理论上每个全局block ID所需的物理空间，是各group中所有层的<code>page_size_bytes</code>之和的最大值。如，10层全量注意力每层的page为32KiB，共320KiB；5层滑窗注意力每层的page为16KiB，共80KiB，取最大值320KiB，那么每个全局block ID只需要预留320KiB。</p>
+<p>DeepSeek V4为了让KV Cache拥有规整的Tensor布局，先定义了<code>tuple</code>。tuple不是新的缓存对象，而是物理布局中的一行page槽位。设rank $r$的Full MLA group中，不同的标准<code>page_size_bytes</code>组成集合$\mathcal{P}_r$，那么一个tuple会为$\mathcal{P}_r$中的每一种page size各预留一个page槽。</p>
+<p>例如，标准page size为<code>[100KiB, 200KiB]</code>，一个tuple的布局就是：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">tuple i:</span><br><span class="line">  100KiB page槽</span><br><span class="line">  200KiB page槽</span><br></pre></td></tr></table></figure>
+<p>因此，一个tuple固定预留<code>100KiB + 200KiB = 300KiB</code>。某个槽当前没有对应的层时，它仍然作为padding存在。</p>
+<p>接下来确定需要多少个tuple。vLLM先把每个group内的层按照<code>page_size_bytes</code>放入不同的桶。记$n_{r,g,p}$为rank $r$上，group $g$中落入page-size桶$p$的层数，则最终需要的tuple数为：<br>$$<br>T_r &#x3D; \max_{g \in \mathcal{G}_r,\ p \in \mathcal{P}<em>r} n</em>{r,g,p}.<br>$$<br>例如，100KiB桶中有10层，200KiB桶中有5层，那么需要$T_r&#x3D;10$个tuple：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">          100KiB槽    200KiB槽</span><br><span class="line">tuple 0      有层         有层</span><br><span class="line">tuple 1      有层         有层</span><br><span class="line">tuple 2      有层         有层</span><br><span class="line">tuple 3      有层         有层</span><br><span class="line">tuple 4      有层         有层</span><br><span class="line">tuple 5      有层         padding</span><br><span class="line">tuple 6      有层         padding</span><br><span class="line">tuple 7      有层         padding</span><br><span class="line">tuple 8      有层         padding</span><br><span class="line">tuple 9      有层         padding</span><br></pre></td></tr></table></figure>
+
+<p>在统计最终的$T_r$之前，vLLM会把SWA、C4、C128等非Full-MLA group的page向上对齐到最近的不小于它的Full MLA标准page size；随后使用<code>_approximate_gcd()</code>选择切分宽度，把这些group拆成若干subgroup，并向上补齐tuple数，以尽量减少padding。完成这些对齐和拆分后，<code>_get_kv_cache_config_deepseek_v4()</code>再按照上面的最大桶长度得到最终$T_r$。</p>
+<p>知道tuple大小和tuple数量后，就可以计算rank $r$上一个全局block ID需要预留的物理空间：<br>$$<br>S_r &#x3D; T_r \sum_{p \in \mathcal{P}_r} p.<br>$$<br>上例中，一个tuple占300KiB，共10个tuple，所以：<br>$$<br>S_r &#x3D; 10\times(100+200)&#x3D;3000\text{KiB}.<br>$$<br>这比不带padding的理论值$10\times100+5\times200&#x3D;2000\text{KiB}$多出1000KiB。若$M_r$是该rank可用于KV Cache的显存，那么该rank能够建立的block ID数量为：<br>$$<br>N_r &#x3D; \left\lfloor \frac{M_r}{S_r} \right\rfloor.<br>$$<br>所有rank最终采用$\min_r N_r$，避免某个rank收到超过自身容量的block ID。</p>
+<p>由此，vLLM确定了每个block的规格和内存需求，可以估算并发请求数，并为block申请内存了。</p>
+<p>具体申请显存时，vLLM并不会逐个block地分别申请许多小块显存，而是遍历所有<code>(tuple_idx, page_size)</code>组合。对于每一个组合，vLLM一次性申请一个大小为：<br>$$<br>\textit{page_size}\times\textit{num_blocks}<br>$$<br>的连续Tensor。这个Tensor可以看成沿着block ID方向排列的<code>num_blocks</code>个page：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">(tuple 0, 100KiB): [page 0][page 1][page 2] ... [page N-1]</span><br><span class="line">(tuple 0, 200KiB): [page 0][page 1][page 2] ... [page N-1]</span><br><span class="line">(tuple 1, 100KiB): [page 0][page 1][page 2] ... [page N-1]</span><br><span class="line">(tuple 1, 200KiB): [page 0][page 1][page 2] ... [page N-1]</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>其中$N&#x3D;\textit{num_blocks}$。因此，上例有10个tuple、2种page size，实际会申请$10\times2&#x3D;20$个连续Tensor；每个Tensor内部包含$N$个page，而不是进行$20\times N$次独立的显存申请。</p>
+<p>对于Tensor<code>(tuple_idx, page_size)</code>，block ID为$b$的page位于：<br>$$<br>\left[b\times\textit{page_size},\ (b+1)\times\textit{page_size}\right).<br>$$<br>于是，一个全局block ID并不是一块单独且连续的物理内存。它表示在所有<code>(tuple_idx, page_size)</code> Tensor中取出编号相同的page。例如，block ID 3对应每个Tensor中的<code>page 3</code>；这些page分散在不同Tensor中，合起来才是前文计算出的$S_r$字节。</p>
+<p>每个注意力层在布局阶段都会被分配到一个确定的<code>(tuple_idx, page_size)</code>组合，并记录在对应Tensor的<code>shared_by</code>中。模型初始化时，该层会绑定到这个Tensor。运行请求时，该层先通过自己所属<code>block group</code>的block table得到block ID，再用这个block ID索引Tensor中的相应page。因此，层决定使用哪个Tensor，block table决定使用该Tensor中的哪个page。</p>
+<p>不同<code>block group</code>中的层可能出现在同一个Tensor的<code>shared_by</code>中，这表示它们使用同一套物理page，但是不会同时占用同一个page。所有<code>block group</code>从同一个全局block池申请block ID：只要block ID 3仍被某个group占用，另一个group就不能再独立申请block ID 3；释放后，这个ID以及各Tensor中对应的<code>page 3</code>才可以被其他group重新使用。</p>
+<p>由此，我们就获得了<code>kv_cache_configs</code>，该对象中分rank记载了各GPU上的KV Cache Group信息和对应的张量信息。随后，函数向各Worker发送<code>initialize_kv_cache</code>的调用，各Worker即在自己的GPU上申请张量，并绑定到注意力层。</p>
+<p>KV Cache张量申请完成后，模型本身并不会决定一个请求需要多少个新block。这个决定由Scheduler在每轮调度时提前完成，调用链如下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Scheduler.schedule()</span><br><span class="line">  └─ KVCacheManager.allocate_slots()</span><br><span class="line">       ├─ 计算本轮结束后需要容纳多少个token</span><br><span class="line">       ├─ 计算请求还缺少多少个block</span><br><span class="line">       └─ 从BlockPool取得新的block ID</span><br></pre></td></tr></table></figure>
+
+<p>先考虑普通的全量注意力，不使用推测解码。假设请求已经计算了$N_{computed}$个token，本轮Scheduler又安排它计算$N_{scheduled}$个token，那么本轮结束后，需要为下列数量的token准备KV Cache槽位：</p>
+<p>$$<br>N_{need_slot}&#x3D;N_{computed}+N_{scheduled}.<br>$$</p>
+<p>如果使用推测解码，还要为模型提前生成、等待主模型验证的候选token预留$N_{lookahead}$个槽位：</p>
+<p>$$<br>N_{need_slot}&#x3D;N_{computed}+N_{scheduled}+N_{lookahead}.<br>$$</p>
+<p>对于block大小为<code>block_size</code>的KV Cache Group，需要的block总数为：</p>
+<p>$$<br>N_{required}&#x3D;\left\lceil\frac{N_{need_slot}}{\textit{block_size}}\right\rceil.<br>$$</p>
+<p>设请求已经持有$N_{owned}$个block，其中也包括刚刚命中的前缀缓存block，那么本轮需要新申请的block数为：</p>
+<p>$$<br>N_{new}&#x3D;\max(N_{required}-N_{owned},0).<br>$$</p>
+<p>源码中的计算对应为：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">num_required_blocks = cdiv(num_tokens, <span class="variable language_">self</span>.block_size)</span><br><span class="line">num_new_blocks = num_required_blocks - <span class="built_in">len</span>(req_blocks)</span><br></pre></td></tr></table></figure>
+
+<p>例如，假设<code>block_size=16</code>，某个请求已经计算了30个token，本轮又被调度了4个token，并且已经持有<code>[7, 11]</code>两个block。本轮结束后共有34个token，因此总共需要：</p>
+<p>$$<br>\left\lceil\frac{34}{16}\right\rceil&#x3D;3<br>$$</p>
+<p>个block。请求已经持有两个，所以只需要从<code>BlockPool</code>申请一个新block。假设得到<code>block 19</code>，请求的block table就从：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[7, 11]</span><br></pre></td></tr></table></figure>
+
+<p>变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[7, 11, 19]</span><br></pre></td></tr></table></figure>
+
+<p>如果下一轮又调度5个token，请求的token总数将从34增加到39。$\lceil39&#x2F;16\rceil$仍然等于3，而请求已经持有三个block，因此该轮不需要申请新block。</p>
+<p>DeepSeek V4拥有多个KV Cache Group，Scheduler会让每个Group对应的KV Cache管理器分别执行上述计算。不同Group可以拥有不同的<code>block_size</code>和block table。例如，Full MLA Group可能需要新申请一个block，SWA Group也可能需要新申请一个block；<code>KVCacheCoordinator</code>会把各Group所需的新block数量相加，检查全局<code>BlockPool</code>是否有足够的空闲block ID，再让各Group分别从同一个<code>BlockPool</code>中取得block。对于SWA，<code>allocate_slots()</code>还会先释放已经滑出窗口的旧block，因此其block数量不会随着请求的总长度无限增加。</p>
+<p>Scheduler为请求分配完block以后，会为每个KV Cache Group维护一张block table。block table按照token在请求中的先后顺序，记录每一段token实际位于哪个物理block。例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">block_size = 16</span><br><span class="line">block table = [7, 11, 19]</span><br><span class="line"></span><br><span class="line">token位置  0～15  -&gt; block 7</span><br><span class="line">token位置 16～31  -&gt; block 11</span><br><span class="line">token位置 32～47  -&gt; block 19</span><br></pre></td></tr></table></figure>
+
+<p>对于请求中位置为$p$的token，它位于请求的第几个逻辑block以及block内的偏移分别为：</p>
+<p>$$<br>\textit{logical_block_index}&#x3D;\left\lfloor\frac{p}{\textit{block_size}}\right\rfloor,<br>$$</p>
+<p>$$<br>\textit{offset_in_block}&#x3D;p\bmod\textit{block_size}.<br>$$</p>
+<p>再用<code>logical_block_index</code>查询block table，就能得到实际的物理block ID：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">physical_block_id = block_table[logical_block_index]</span><br></pre></td></tr></table></figure>
+
+<p>在通常的block大小与注意力kernel使用的block大小相同，并且一个请求的KV没有被拆分到多张GPU的情况下，该token在KV Cache Tensor中的一维槽位编号为：</p>
+<p>$$<br>\textit{slot}&#x3D;\textit{physical_block_id}\times\textit{block_size}+\textit{offset_in_block}.<br>$$</p>
+<p>继续使用上面的例子。本轮计算的4个token位于请求的<code>[30,31,32,33]</code>位置，block table是<code>[7,11,19]</code>，因此映射过程是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">token 30 -&gt; 第1个逻辑block -&gt; block 11，offset 14 -&gt; slot 190</span><br><span class="line">token 31 -&gt; 第1个逻辑block -&gt; block 11，offset 15 -&gt; slot 191</span><br><span class="line">token 32 -&gt; 第2个逻辑block -&gt; block 19，offset  0 -&gt; slot 304</span><br><span class="line">token 33 -&gt; 第2个逻辑block -&gt; block 19，offset  1 -&gt; slot 305</span><br></pre></td></tr></table></figure>
+
+<p>最终得到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">positions    = [30, 31, 32, 33]</span><br><span class="line">slot_mapping = [190, 191, 304, 305]</span><br></pre></td></tr></table></figure>
+
+<p>因此，token与block的映射分为两个阶段建立。Scheduler先建立“request到block ID列表”的映射，也就是block table；随后，Scheduler通过<code>SchedulerOutput</code>把block ID和<code>num_computed_tokens</code>交给<code>GPUModelRunner</code>。<code>GPUModelRunner</code>根据每个token的<code>position</code>查询block table，生成“本轮每个token到物理槽位”的<code>slot_mapping</code>。DeepSeek V4使用<code>MultiGroupBlockTable</code>，每个KV Cache Group都有自己的block table，也会分别生成自己的<code>slot_mapping</code>。</p>
+<p>更新KV Cache时，注意力层根据<code>slot_mapping</code>把当前token的K和V写入对应槽位；计算注意力时，注意力kernel再根据block table找到该请求的历史KV。因此，后文所说的“整理本轮需要计算的token”，并不是重新决定本轮计算哪些token，而是根据Scheduler已经给出的token数量和<code>num_computed_tokens</code>，从各请求中取出对应token，拼成一次模型forward使用的<code>input_ids</code>，同时计算它们的<code>position</code>、请求边界和<code>slot_mapping</code>。</p>
+<p>在<code>exexute_model</code>的执行过程中，模型开始推理前，vLLM会为此次前传做一系列的准备工作，大致如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">GPUModelRunner.execute_model(scheduler_output)</span><br><span class="line">  ├─ _prepare_inputs()</span><br><span class="line">  │    └─ 把分散存放在各个请求中的、本轮被调度执行的 token，拼成模型一次 forward 所需的连续一维 input_ids</span><br><span class="line">  ├─ _get_slot_mappings()</span><br><span class="line">  │    └─ 计算每个新token应该写入哪个KV Cache槽位</span><br><span class="line">  ├─ _build_attention_metadata()</span><br><span class="line">  │    ├─ 构造CommonAttentionMetadata</span><br><span class="line">  │    └─ FlashInferMetadataBuilder.build()</span><br><span class="line">  │         ├─ 区分prefill和decode请求</span><br><span class="line">  │         ├─ 将block table转换为FlashInfer使用的page索引</span><br><span class="line">  │         └─ 构造FlashInferMetadata</span><br><span class="line">  ├─ set_forward_context(attn_metadata, slot_mapping, ...)</span><br><span class="line">  └─ model.forward()</span><br><span class="line">       └─ 注意力层通过get_attention_context(layer_name)取回上述信息</span><br></pre></td></tr></table></figure>
+
+<p>例如，假设<code>block_size=16</code>，本轮batch中有两个请求。请求A已经计算了31个token，本轮decode 1个token，其block table为<code>[7, 11]</code>；请求B已经计算了16个token，本轮继续prefill 4个token，其block table为<code>[4, 9]</code>。vLLM会先把本轮输入排列为：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[A的1个decode token | B的4个prefill token]</span><br></pre></td></tr></table></figure>
+<p>于是，<code>query_start_loc=[0, 1, 5]</code>，表示请求A使用第0个输入token，请求B使用第1～4个输入token；本轮计算完成后的<code>seq_lens=[32, 20]</code>。请求A的新token位于block 11的第15个槽位，请求B的4个新token位于block 9的第0～3个槽位，因此：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">slot_mapping = [11×16+15, 9×16+0, 9×16+1, 9×16+2, 9×16+3]</span><br><span class="line">             = [191, 144, 145, 146, 147]</span><br></pre></td></tr></table></figure>
+
+<p><code>_build_attention_metadata()</code>先把这些序列长度、block table、<code>query_start_loc</code>和<code>slot_mapping</code>装入<code>CommonAttentionMetadata</code>。随后，它会遍历每个KV Cache Group中的attention group；attention group是使用同一种注意力后端和执行方式的一组层。对于使用FlashInfer的attention group，vLLM会调用<code>FlashInferMetadataBuilder.build()</code>。该函数识别出当前batch包含1个decode token和4个prefill token，并把二维block table整理成FlashInfer能够直接读取的page索引，最终生成<code>FlashInferMetadata</code>。</p>
+<p>同一个attention group中的注意力层共享这份metadata。<code>set_forward_context()</code>在模型前传前将其保存到当前的<code>ForwardContext</code>中；执行到某个注意力层时，<code>get_attention_context(layer_name)</code>再按照层名取出该层的metadata、KV Cache Tensor和<code>slot_mapping</code>。</p>
+<p>更新KV Cache的入口是<code>unified_kv_cache_update()</code>。在该函数内，首先通过<code>get_attention_context()</code>取得当前的注意力上下文：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_, attn_layer, kv_cache, layer_slot_mapping = get_attention_context(layer_name)</span><br></pre></td></tr></table></figure>
+
+<p>其中，<code>attn_layer</code>是当前层的<code>Attention</code>或<code>MLAAttention</code>实例，用于取得该层的注意力后端并调用其<code>do_kv_cache_update()</code>方法。<br><code>kv_cache</code>是初始化时绑定到当前注意力层的KV Cache Tensor，用于保存当前层产生的K和V。<br><code>layer_slot_mapping</code>记录当前batch中每个token应该写入<code>kv_cache</code>的哪个物理槽位，用于确定K和V的具体写入位置。</p>
+<p>然后，就可以调用具体<code>attn_layer</code>的<code>do_kv_cache_update</code>方法完成完成KV Cache的更新。对于FlashInfer，会直接调用C语言编写的op完成计算。最后，再调用<code>attn_layer</code>的<code>unified_attention_with_output</code>方法，该方法会调用对应层的attention实现完成具体的注意力计算。</p>
+<p>前缀缓存的查询不在<code>GPUModelRunner.execute_model()</code>中，而是在更早的Scheduler调度阶段。调用链如下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Scheduler.schedule()</span><br><span class="line">  └─ 调度一个尚未开始执行的WAITING请求</span><br><span class="line">       └─ KVCacheManager.get_computed_blocks(request)</span><br><span class="line">            └─ KVCacheCoordinator.find_longest_cache_hit()</span><br><span class="line">                 └─ 各注意力类型的Manager.find_longest_cache_hit()</span><br><span class="line">                      └─ BlockPool.get_cached_block(block_hash, group_ids)</span><br></pre></td></tr></table></figure>
+
+<p>入口位于Scheduler调度等待请求的代码中：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> request.num_computed_tokens == <span class="number">0</span>:</span><br><span class="line">    new_computed_blocks, num_new_local_computed_tokens = (</span><br><span class="line">        <span class="variable language_">self</span>.kv_cache_manager.get_computed_blocks(request)</span><br><span class="line">    )</span><br></pre></td></tr></table></figure>
+<p>前缀缓存是<code>BlockPool</code>维护的一张查询表：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">block hash -&gt; 已经保存了对应KV的KVCacheBlock</span><br></pre></td></tr></table></figure>
+
+<p>查询表是<code>BlockPool.cached_block_hash_to_block</code>。一个请求创建时，vLLM会按照完整block对token分段。假设<code>block_size=16</code>，prompt为<code>[t0,t1,...,t49]</code>，那么可以得到三个完整block的hash：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">H0 = hash(t0 ... t15)</span><br><span class="line">H1 = hash(H0, t16 ... t31)</span><br><span class="line">H2 = hash(H1, t32 ... t47)</span><br></pre></td></tr></table></figure>
+
+<p>最后两个token<code>t48、t49</code>无法组成完整block，因此不会生成block hash。后一个block的hash包含前一个block的hash，所以它不仅代表当前16个token，还代表从请求开头到当前block为止的整个前缀。如果前面的token不同，即使当前block中的token相同，hash也不会相同。</p>
+<p>除了token，hash还会包含可能改变KV计算结果的信息，例如LoRA、多模态输入、<code>cache_salt</code>和prompt embedding。因此，两次请求只有在这些条件也兼容时才能复用对应的KV Cache。</p>
+<p>当一个请求计算出新的完整block后，vLLM会调用：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">self</span>.coordinator.cache_blocks(request, num_tokens_to_cache)</span><br></pre></td></tr></table></figure>
+
+<p>最终由<code>BlockPool.cache_full_blocks()</code>给物理block记录hash，并将其加入查询表：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">block_hash_with_group_id = make_block_hash_with_group_id(</span><br><span class="line">    block_hash, kv_cache_group_id</span><br><span class="line">)</span><br><span class="line">block.block_hash = block_hash_with_group_id</span><br><span class="line">cached_block_hash_to_block.insert(block_hash_with_group_id, block)</span><br></pre></td></tr></table></figure>
+
+<p>例如，某次计算结束后，查询表中可能有：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">(H0, Full Attention Group) -&gt; block 7</span><br><span class="line">(H1, Full Attention Group) -&gt; block 11</span><br><span class="line">(H2, Full Attention Group) -&gt; block 19</span><br></pre></td></tr></table></figure>
+
+<p>请求结束后，这些block的引用计数会下降。引用计数变为0时，block进入可回收队列，但是其中的KV和hash暂时保留。此时它没有被请求占用，却仍可以被新的请求命中；只有显存不足、该block被重新分配时，旧hash和KV才会被淘汰。因此，前缀缓存不需要单独建立另一套KV Cache池。</p>
+<p>新请求第一次进入Scheduler时，<code>KVCacheManager.get_computed_blocks()</code>将<code>request.block_hashes</code>交给：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">self</span>.coordinator.find_longest_cache_hit(</span><br><span class="line">    request.block_hashes,</span><br><span class="line">    max_cache_hit_length,</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>以普通全量注意力为例，查询过程可以简化为：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> block_hash <span class="keyword">in</span> block_hashes:</span><br><span class="line">    cached_block = block_pool.get_cached_block(</span><br><span class="line">        block_hash, kv_cache_group_ids</span><br><span class="line">    )</span><br><span class="line">    <span class="keyword">if</span> cached_block:</span><br><span class="line">        computed_blocks.append(cached_block)</span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        <span class="keyword">break</span></span><br></pre></td></tr></table></figure>
+
+<p>vLLM从第一个block开始连续查询，遇到第一个未命中的block便停止。由于每个block的hash都包含前一个block的hash，所以不存在跳过中间未命中的block、继续复用后续block的情况。</p>
+<p>DeepSeek V4拥有多个KV Cache Group。查询表中的key除了block hash，还包含<code>kv_cache_group_id</code>，因此同一段token在不同Group中可以对应不同的物理block：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">(H0, Full MLA Group) -&gt; block 7</span><br><span class="line">(H0, SWA Group)      -&gt; block 31</span><br><span class="line">(H0, C4 Group)       -&gt; block 46</span><br></pre></td></tr></table></figure>
+
+<p><code>HybridKVCacheCoordinator</code>会分别检查Full MLA、SWA、C4、C128等注意力类型能够命中多长，然后选择所有类型都能正确使用的公共前缀长度。例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Full MLA命中48个token</span><br><span class="line">SWA命中64个token</span><br><span class="line">C4命中32个token</span><br><span class="line"></span><br><span class="line">最终命中长度 = 32个token</span><br></pre></td></tr></table></figure>
+
+<p>之所以只能使用前32个token，是因为从第32个token开始，至少有一个KV Cache Group没有可以复用的KV。</p>
+<p>假设<code>block_size=16</code>，新请求的prompt共有50个token，前48个token命中缓存，对应的block ID为<code>[7,11,19]</code>。查询返回：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">new_computed_blocks = [block7, block11, block19]</span><br><span class="line">num_new_local_computed_tokens = <span class="number">48</span></span><br></pre></td></tr></table></figure>
+
+<p>首先，Scheduler调用：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">allocate_slots(</span><br><span class="line">    request,</span><br><span class="line">    num_new_tokens,</span><br><span class="line">    num_new_computed_tokens=<span class="number">48</span>,</span><br><span class="line">    new_computed_blocks=[block7, block11, block19],</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>其中的<code>allocate_new_computed_blocks()</code>会增加block 7、11、19的引用计数，并把它们直接加入新请求的block table。这里不会复制KV数据，新请求与旧缓存直接引用相同的物理page。</p>
+<p>随后，Scheduler计算本轮仍需执行的token数：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">num_computed_tokens = <span class="number">48</span></span><br><span class="line">num_new_tokens = request.num_tokens - num_computed_tokens</span><br><span class="line">               = <span class="number">50</span> - <span class="number">48</span></span><br><span class="line">               = <span class="number">2</span></span><br></pre></td></tr></table></figure>
+
+<p>因此，Scheduler不会再调度前48个token，只调度<code>t48、t49</code>，并设置：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">request.num_computed_tokens = <span class="number">48</span></span><br></pre></td></tr></table></figure>
+
+<p>构造<code>SchedulerOutput</code>时，<code>NewRequestData</code>会同时携带命中的block ID、新分配的block ID和已计算token数：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">NewRequestData(</span><br><span class="line">    block_ids=([<span class="number">7</span>, <span class="number">11</span>, <span class="number">19</span>, 新block],),</span><br><span class="line">    num_computed_tokens=<span class="number">48</span>,</span><br><span class="line">    ...</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p><code>GPUModelRunner</code>据此建立请求状态，所以它在开始forward前就知道前48个token已经计算完成，以及这些token的KV位于哪些物理block。</p>
+<p>在<code>_prepare_inputs()</code>中，token位置按照下面的公式计算：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">positions = num_computed_tokens + query_pos</span><br></pre></td></tr></table></figure>
+
+<p>因此，本轮真正送入模型的是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">input_ids = [t48, t49]</span><br><span class="line">positions = [48, 49]</span><br></pre></td></tr></table></figure>
+
+<p>而不是重新送入<code>[t0,t1,...,t49]</code>。最终生成的attention metadata中，block table包含：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[7, 11, 19, 新block]</span><br></pre></td></tr></table></figure>
+
+<p>执行<code>t48、t49</code>的注意力时，它们新产生的K和V被写入新分配的槽位；FlashInfer则根据block table，从block 7、11、19中直接读取前48个token已有的K和V。前48个token不再经过模型计算。</p>
+<p>因此，前缀缓存节省计算的效果是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">没有前缀缓存：forward 50个token</span><br><span class="line">命中48个token：forward 2个token，并直接读取前48个token已有的KV</span><br></pre></td></tr></table></figure>
+
+<p>查询前，vLLM会设置：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">max_cache_hit_length = request.num_tokens - <span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<p>即使整个prompt的KV都在缓存中，也必须重新计算最后一部分，否则没有token进入模型forward，便无法得到用于生成下一个token的logits。</p>
+<p>例如，prompt恰好包含48个token，三个完整block全部存在于缓存中。理论上可以复用48个token的KV，但为了得到下一个token的logits，至少需要重新计算最后一个token。当前的缓存复用又要求<code>num_computed_tokens</code>按照完整block对齐，因此不能只退回一个token，而会退回一个完整block：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">命中前32个token</span><br><span class="line">重新计算最后16个token</span><br></pre></td></tr></table></figure>
+
+<p>前缀缓存的完整使用过程可以总结为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">请求创建</span><br><span class="line">  └─ 按完整token block计算链式hash</span><br><span class="line"></span><br><span class="line">旧请求执行</span><br><span class="line">  └─ 将完整block的hash登记到BlockPool查询表</span><br><span class="line"></span><br><span class="line">新请求进入Scheduler</span><br><span class="line">  └─ 用新请求的block hash查询最长连续命中</span><br><span class="line">       ├─ 将命中的物理block加入新请求的block table</span><br><span class="line">       ├─ 将request.num_computed_tokens设为命中长度</span><br><span class="line">       └─ 只调度未命中的后缀token</span><br><span class="line"></span><br><span class="line">GPUModelRunner</span><br><span class="line">  ├─ 只将后缀token放入input_ids</span><br><span class="line">  └─ Attention通过block table读取命中前缀已有的KV</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2026/07/16/vllm-ascend/dsv4_att_moe/" rel="prev" title="DeepSeek的Attention/mHC机制">
+      <i class="fa fa-chevron-left"></i> DeepSeek的Attention/mHC机制
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2026/07/20/vllm-ascend/vllm_call_chain/" rel="next" title="vLLM在一次推理请求中的调用链">
+      vLLM在一次推理请求中的调用链 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Liu Yao"
+      src="/images/rain_1x1.jpg">
+  <!--
+  <p class="site-author-name" itemprop="name">Liu Yao</p>
+  -->
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">18</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Liu Yao</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
